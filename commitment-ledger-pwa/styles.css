@@ -115,13 +115,9 @@ ul.tasks { list-style: none; margin: 0; padding: 0; display: flex; flex-directio
 .meter span { display: block; height: 100%; background: var(--accent); border-radius: 99px; transition: width .3s; }
 .meter-row { display: flex; flex-direction: column; gap: 6px; }
 
-.carry { border: 1px dashed var(--line); border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
 .carry-item { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
 .carry-item span { min-width: 0; overflow-wrap: anywhere; }
 
-.timer { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
-.timer .clock { font-family: var(--mono); font-size: 34px; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
-.timer.running .clock { color: var(--accent); }
 
 .choices { display: flex; gap: 6px; flex-wrap: wrap; }
 .choice { border: 1px solid var(--line); background: var(--bg); padding: 6px 12px; border-radius: 999px; cursor: pointer; font-size: 13px; font-weight: 500; }
@@ -357,7 +353,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--ink); outli
 /* Lists and panels */
 .task { border-top: 1px solid var(--line); }
 .tag { font-family: var(--body); font-weight: 700; color: var(--ink); }
-.carry, .picker { border: 1.5px dashed var(--ink); border-radius: 0; }
+.picker { border: 1.5px dashed var(--ink); border-radius: 0; }
 .prog, .pedit { background: var(--surface); border-radius: 0; }
 .meter { height: 6px; background: var(--empty); border-radius: 0; }
 .meter span { background: var(--ink); border-radius: 0; }
@@ -367,8 +363,6 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--ink); outli
 
 /* Numbers set large, like the timer */
 .stat b, .tri .big { font-family: var(--body); font-weight: 700; letter-spacing: -0.04em; font-size: 34px; line-height: 1; }
-.timer .clock { font-family: var(--body); font-weight: 700; letter-spacing: -0.05em; font-size: 44px; }
-.timer.running .clock { color: var(--ink); }
 .proj .due { font-family: var(--body); font-weight: 700; }
 
 /* History: ink-tone heatmap and bars */
@@ -430,3 +424,15 @@ input, select, textarea, button { font-family: var(--body); }
 .bal-nudge { border: 2px solid var(--warn); padding: 10px 12px; font-size: 14px; }
 @media (max-width: 420px) { .bal-wrap { justify-content: center; } .bal-legend { flex-basis: 100%; } }
 @media (prefers-reduced-motion: reduce) { .donut-seg.over { animation: none; } .donut-seg { transition: none; } }
+
+
+/* ---- active project + session strip ---- */
+.active-proj .sec-head h2 { display: flex; align-items: center; gap: 8px; min-width: 0; overflow-wrap: anywhere; }
+.active-proj .cat-dot { width: 12px; height: 12px; margin: 0; flex: none; }
+.ap-row { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.ap-frac { font-size: 22px; letter-spacing: -0.02em; }
+.ap-pct { margin-left: auto; font-weight: 700; }
+.ap-meter { height: 10px; }
+.ap-meter span { background: var(--cat, var(--ink)); }
+.session-strip { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; border: 2px solid var(--ink); padding: 10px 12px; }
+.session-strip #clock { font-variant-numeric: tabular-nums; }

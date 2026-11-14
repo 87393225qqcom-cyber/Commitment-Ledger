@@ -306,11 +306,11 @@
         <div class="f-center"><div id="focus-time">--:--</div><div id="focus-sub" class="f-small"></div></div>
         <div class="f-bottom">${wrapUp ? wrapPanel() : `
           <div id="focus-alert" class="f-alert" role="alert" ${timer.alerted && !timer.ack ? '' : 'hidden'}>
-            <p class="f-alert-head">● Time’s up</p><p>You reached your ${mins(timer.target)} target. Log it, or keep going.</p>
-            <div class="f-row"><button class="f-btn inv" data-act="focus-add10">+10 min</button><button class="f-btn inv" data-act="focus-keep">Keep going</button><button class="f-btn inv solid" data-act="stop">Stop and log</button></div></div>
+            <p class="f-alert-head">● Time’s up</p><p>You reached your ${mins(timer.target)} target. End the session, or keep going.</p>
+            <div class="f-row"><button class="f-btn inv" data-act="focus-add10">+10 min</button><button class="f-btn inv" data-act="focus-keep">Keep going</button><button class="f-btn inv solid" data-act="stop">End session</button></div></div>
           <div class="f-targets"><span class="f-small">Target</span>
             ${[...new Set([...TARGETS, timer.target])].sort((a, b) => a - b).map(v => `<button class="f-chip" data-act="focus-target" data-v="${v}" aria-pressed="${v === timer.target}">${mins(v)}</button>`).join('')}</div>
-          <div class="f-row"><button class="f-btn" data-act="focus-done">Mark done</button><button class="f-btn solid" data-act="stop">Stop and log</button></div>`}
+          <div class="f-row"><button class="f-btn solid" data-act="stop">End session</button></div>`}
         </div>
       </div>`;
     el.classList.toggle('wrapping', !!wrapUp);
@@ -453,7 +453,6 @@
         const v = Number(b.dataset.v), passed = (Date.now() - timer.start) / 1000 >= v * 60;
         timer.target = v; timer.alerted = passed; timer.ack = true; saveTimer(); renderFocus(); tick(); break;
       }
-      case 'focus-done': openWrapUp(true); break;
       case 'wrap-back': wrapUp = null; renderFocus(); tick(); break;
       case 'wrap-skip': saveWrap(true); break;
       case 'wrap-save': saveWrap(false); break;
@@ -520,7 +519,7 @@
     if (!d.locked) actions = `${editBtn}<button class="btn quiet small" data-act="remove" data-id="${t.id}" aria-label="Remove task">Remove</button>`;
     else if (!d.review.closed) {
       if (t.dropped) actions = `<button class="btn quiet small" data-act="restore" data-id="${t.id}">Restore</button>`;
-      else if (!t.done) actions = `${running ? `<button class="btn small primary" data-act="stop">Stop</button>` : `<button class="btn small" data-act="focus" data-id="${t.id}">Focus</button>`}
+      else if (!t.done) actions = `${running ? `<button class="btn small primary" data-act="focus-open">Timer</button>` : timer ? '' : `<button class="btn small" data-act="focus" data-id="${t.id}">Focus</button>`}
         ${editBtn}<button class="btn quiet small" data-act="drop" data-id="${t.id}">Drop</button>`;
     }
     const dropping = state.ui.dropping === t.id ? `<div class="drop-box">
@@ -563,10 +562,10 @@
     return h + '</div>';
   }
 
-  function pickerPanel(d) {
+  function pickerPanel(d, carry = '') {
     const used = new Set(d.tasks.map(t => t.backlogId).filter(Boolean));
     const open = backlog().filter(b => !b.done && !used.has(b.id));
-    if (!open.length) return '';
+    if (!open.length && !carry) return '';
     const catOf = b => b.project && projectOf(b.project) ? projCat(projectOf(b.project)) : b.category;
     const groups = CATS.map(c => {
       const items = open.filter(b => catOf(b) === c.id);
@@ -576,7 +575,7 @@
         ${shown.map(b => `<div class="carry-item"><span>${esc(b.text)}${b.project && projectName(b.project) ? ` <span class="tag">${esc(projectName(b.project))}</span>` : ''}</span><button class="btn small" data-act="pick" data-id="${b.id}">Add</button></div>`).join('')}
         ${items.length > shown.length ? `<a class="muted" href="#projects" style="font-size:13px">${items.length - shown.length} more in Projects</a>` : ''}</div>`;
     }).join('');
-    return `<div class="picker"><span class="label">Pick from your lists</span>${groups}</div>`;
+    return `<div class="picker"><span class="label">Suggestions</span>${carry}${groups}</div>`;
   }
 
   function viewToday() {
@@ -584,6 +583,7 @@
     let h = '';
 
     h += balanceCard();
+    h += `<section class="card active-proj" id="active-proj" hidden></section>`;
 
     // 1 — commit
     h += `<section class="card"><div class="sec-head"><h2><span class="step">1</span>Commit</h2>
@@ -597,18 +597,17 @@
     if (!d.locked) {
       h += `<p class="muted">Write down what you will finish today. Pick outcomes you can check off, not activities. Three is usually plenty.</p>`;
       const prev = previousDay(k);
+      let carry = '';
       if (prev && !d.tasks.length) {
-        const open = (prev.tasks || []).filter(t => !t.done && !t.dropped);
+        // Leftovers that also sit in a project list are offered once, under that list.
+        const open = (prev.tasks || []).filter(t => !t.done && !t.dropped && !(t.backlogId && backlog().some(b => b.id === t.backlogId && !b.done)));
         const tom = prev.review?.tomorrow;
-        if (open.length || tom) {
-          h += `<div class="carry"><span class="label">Left over from ${esc(shortDate(prev.date))}</span>
-            ${tom ? `<div class="carry-item"><span>“${esc(tom)}” <span class="muted">(your first task for today)</span></span><button class="btn small" data-act="carry-tom">Add</button></div>` : ''}
-            ${open.map(t => `<div class="carry-item"><span>${esc(t.text)}</span><button class="btn small" data-act="carry" data-id="${t.id}">Add</button></div>`).join('')}
-          </div>`;
-        }
+        if (open.length || tom) carry = `<div class="grp"><span class="cat-label">From ${esc(shortDate(prev.date))}</span>
+            ${tom ? `<div class="carry-item"><span>“${esc(tom)}” <span class="muted">(your planned first task)</span></span><button class="btn small" data-act="carry-tom">Add</button></div>` : ''}
+            ${open.map(t => `<div class="carry-item"><span>${esc(t.text)}</span><button class="btn small" data-act="carry" data-id="${t.id}">Add</button></div>`).join('')}</div>`;
       }
       if (d.tasks.length) h += `<ul class="tasks">${d.tasks.map(t => taskRow(k, d, t)).join('')}</ul>`;
-      h += pickerPanel(d);
+      h += pickerPanel(d, carry);
       h += addForm(false);
       h += `<div class="row" style="justify-content:space-between">
         <button class="btn quiet small" data-act="rest">Mark today as a rest day</button>
@@ -628,12 +627,11 @@
 
     // 2 — focus
     const tt = timer ? getDay(timer.day).tasks.find(x => x.id === timer.taskId) : null;
-    h += `<section class="card"><div class="sec-head"><h2><span class="step">2</span>Work</h2><span class="chip">${mins(s.minutes)} logged today</span></div>
-      <div class="timer ${timer ? 'running' : ''}">
-        <div><div class="clock" id="clock">${timer ? '' : '00:00:00'}</div>
-        <p class="muted">${timer ? `On: ${esc(tt ? tt.text : 'a task')}` : 'Press Focus on a task to open the full-screen timer. It counts down to your target and chimes when time is up.'}</p></div>
-        ${timer ? '<span class="row"><button class="btn" data-act="focus-open">Full screen</button><button class="btn primary" data-act="stop">Stop and log</button></span>' : ''}
-      </div>${logPanel(k, d)}</section>`;
+    h += `<section class="card"><div class="sec-head"><h2><span class="step">2</span>Work</h2></div>
+      ${timer ? `<div class="session-strip"><span><span class="label">In session</span><br>${esc(tt ? tt.text : 'Focus')} · <b class="num" id="clock"></b></span>
+          <button class="btn primary" data-act="focus-open">Open timer</button></div>`
+        : '<p class="muted small">Press <b>Focus</b> on a task to start the timer. When you end the session you can log words, milestones or a note in the same step. Use the box below only for work you didn’t time.</p>'}
+      ${logPanel(k, d)}</section>`;
 
     // 3 — close
     const r = d.review;
@@ -815,8 +813,7 @@
     const g = progressOf(p);
     return `<div class="prog"><div class="head"><span><span class="metric-chip">${esc(metricName(g.metric))}</span></span><span class="num small">${esc(g.head)}</span></div>
       ${g.ratio != null ? `<div class="meter" role="img" aria-label="${Math.round(g.ratio * 100)}% of target"><span style="width:${g.ratio * 100}%"></span></div>` : ''}
-      ${g.sub.length ? `<p class="muted small">${g.sub.map(esc).join(' · ')}</p>` : ''}
-      ${logForm('lg-' + p.id, p)}</div>`;
+      ${g.sub.length || g.metric !== 'time' ? `<p class="muted small">${[...g.sub, ...(g.metric !== 'time' ? [`${mins(projMinutes(p.id))} focused`] : [])].map(esc).join(' · ')}</p>` : ''}</div>`;
   }
 
   function backlogList(items) {
@@ -860,8 +857,7 @@
         h += `<div class="proj">
           <span class="name">${esc(p.name)}</span>
           <span class="due ${f.late ? 'late' : ''}">${p.deadline ? f.due : '<span class="chip">Ongoing</span>'}</span>
-          <div class="facts"><span class="num">${mins(f.minutes)} focused</span><span class="num">${f.done} task${f.done === 1 ? '' : 's'} done</span>
-            <span>${f.lastDay ? (f.idle === 0 ? 'Worked on today' : `Last worked ${f.idle} day${f.idle === 1 ? '' : 's'} ago`) : 'Not started'}</span>
+          <div class="facts"><span>${f.lastDay ? (f.idle === 0 ? 'Worked on today' : `Last worked ${f.idle} day${f.idle === 1 ? '' : 's'} ago`) : 'Not started'}</span>
             ${f.idle != null && f.idle >= 5 && !f.late ? '<span class="chip warn">Going stale</span>' : ''}
             ${p.deadline ? `<span class="muted">Due ${esc(parse(p.deadline).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }))}</span>` : ''}
             <span style="margin-left:auto">${state.ui.confirmDel === p.id
@@ -1315,6 +1311,43 @@
       if (!nudged[key]) { nudged[key] = true; toast(`${catName(over.id)} has passed ${lim}% of today’s time.`); }
     } else n.hidden = true;
     const ms = document.getElementById('miner-state'); if (ms) ms.textContent = timer ? 'Mining…' : 'Zzz… idle';
+    updateActiveProject();
+  }
+
+  // The project you're working on: the running session's, else the last one you worked on today,
+  // else the nearest deadline.
+  function activeProject() {
+    const k = todayKey(), d = getDay(k), live = activeProjects();
+    const ok = id => id && live.some(p => p.id === id);
+    const tt = timer ? timerTask() : null;
+    if (tt && ok(tt.project)) return { p: projectOf(tt.project), why: 'In session' };
+    const logs = (d.logs || []).filter(l => ok(l.project)).sort((a, b) => (a.at || '') < (b.at || '') ? 1 : -1);
+    if (logs[0]) return { p: projectOf(logs[0].project), why: 'Worked on today' };
+    const worked = (d.tasks || []).filter(t => ok(t.project) && (t.minutes || t.done));
+    if (worked.length) return { p: projectOf(worked[worked.length - 1].project), why: 'Worked on today' };
+    const due = live.filter(p => p.deadline).sort((a, b) => a.deadline < b.deadline ? -1 : 1)[0];
+    return due ? { p: due, why: 'Next deadline' } : null;
+  }
+  function updateActiveProject() {
+    const el = document.getElementById('active-proj'); if (!el) return;
+    const a = activeProject(); if (!a) { el.hidden = true; return; }
+    const p = a.p, g = progressOf(p);
+    let head = g.head, ratio = g.ratio;
+    // Add the running session live for time-tracked projects.
+    const tt = timer ? timerTask() : null;
+    if (tt && tt.project === p.id && g.metric === 'time') {
+      const live = (Date.now() - timer.start) / 60000, ws = weekStart(todayKey());
+      const base = p.deadline ? projMinutes(p.id) : projMinutes(p.id, ws), tot = base + live;
+      head = p.target ? `${mins(Math.round(tot))} / ${p.target}h${p.deadline ? '' : ' this week'}` : `${mins(Math.round(tot))}${p.deadline ? ' total' : ' this week'}`;
+      if (p.target) ratio = Math.min(1, tot / (p.target * 60));
+    }
+    const c = projCat(p);
+    el.className = `card active-proj cat-${c}`;
+    el.innerHTML = `<div class="sec-head"><h2><span class="cat-dot"></span>${esc(p.name)}</h2><span class="chip${a.why === 'In session' ? ' on' : ''}">${esc(a.why)}</span></div>
+      <div class="ap-row"><span class="metric-chip">${esc(metricName(g.metric))}</span><b class="num ap-frac">${esc(head)}</b>${ratio != null ? `<span class="num ap-pct">${Math.round(ratio * 100)}%</span>` : ''}</div>
+      ${ratio != null ? `<div class="meter ap-meter" role="img" aria-label="${Math.round(ratio * 100)}% of target"><span style="width:${(ratio * 100).toFixed(1)}%"></span></div>` : '<p class="muted small">No target set. Add one under Projects → Edit to see a progress bar.</p>'}
+      ${g.sub.length ? `<p class="muted small">${g.sub.map(esc).join(' · ')}</p>` : ''}`;
+    el.hidden = false;
   }
 
   // Pixel miner, drawn on a 24×18 grid (4 px cells). Original sprite, coloured by fixed palette.
@@ -1487,7 +1520,7 @@
         <button class="btn" data-act="preview-sound">▶ Preview</button><span class="muted small">${esc(snd.hint)}</span></div></section>`;
 
     h += `<section class="card"><div class="sec-head"><h2>Backup</h2>${lb ? `<span class="chip ${daysBetween(fmt(lb), todayKey()) >= 7 ? 'warn' : 'on'}">Last backup ${esc(shortDate(fmt(lb)))}</span>` : '<span class="chip warn">Never backed up</span>'}</div>
-      <p class="muted small">Your ledger is stored only on this device: <span class="num">${nDays}</span> days, <span class="num">${nProj}</span> projects, <span class="num">${nTasks}</span> listed tasks. Export a backup file every week or so and keep it in iCloud Drive or Files.</p>
+      <p class="muted small">Your ledger is stored only on this device: <span class="num">${nDays}</span> days, <span class="num">${nProj}</span> projects, <span class="num">${nTasks}</span> listed tasks. Export a backup file every week or so and keep it in iCloud Drive or Files. Safari and the Home Screen app keep separate data, so use the Home Screen app day to day.</p>
       <div class="row"><button class="btn primary" data-act="export">Export data (JSON)</button><button class="btn" data-act="copy-backup">Copy as text</button>
         <label class="btn" for="import-file">Import data (JSON)</label><input type="file" id="import-file" accept="application/json,.json" hidden></div>`;
     if (pi) h += `<div class="pedit"><span>Replace everything on this device with the backup from <b>${esc(pi.exportedAt ? new Date(pi.exportedAt).toLocaleString() : 'an unknown date')}</b> (${Object.keys(pi.days).length} days, ${(pi.profile.projects || []).filter(p => !p.archived).length} projects)?</span>
@@ -1497,10 +1530,6 @@
     h += `<section class="card"><div class="sec-head"><h2>User manual · 使用手册</h2></div>
       <p class="muted small">A short guide in English and Chinese. 中英文简明使用指南。</p>
       <div class="row"><a class="btn" href="manual.html">Open manual · 打开手册</a></div></section>`;
-
-    h += `<section class="card"><div class="sec-head"><h2>Install on iPhone</h2>${isStandalone() ? '<span class="chip on">Installed</span>' : ''}</div>
-      <ol class="small steps"><li>Open this page in <b>Safari</b>.</li><li>Tap the <b>Share</b> button.</li><li>Choose <b>Add to Home Screen</b>, then <b>Add</b>.</li><li>Open the ledger from its icon. It runs full screen and keeps your data.</li></ol>
-      <p class="muted small">Data saved in Safari and in the Home Screen app are separate. Use the Home Screen app day to day, and if you started in Safari, export there and import in the app.</p></section>`;
 
     h += `<section class="card"><div class="sec-head"><h2>Erase</h2></div>
       <p class="muted small">Deletes every day, project and setting on this device. Export first if you might want it back.</p>
