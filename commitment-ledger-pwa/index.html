@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Commitment Ledger</title>
+  <meta name="description" content="A private daily accountability ledger: commit, work, close the day.">
+
+  <!-- Installable app (Android/desktop read the manifest; iOS reads the apple-* tags) -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Ledger">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <meta name="theme-color" content="#eef2f3" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0e1417" media="(prefers-color-scheme: dark)">
+  <meta name="format-detection" content="telephone=no">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Commitment Ledger</h1>
+      <p class="date" id="today-date"></p>
+    </div>
+    <div class="pills" id="pills"></div>
+  </header>
+  <div id="install" class="install" hidden></div>
+  <nav class="tabs" aria-label="Views">
+    <a href="#today" data-view="today">Today</a>
+    <a href="#history" data-view="history">History</a>
+    <a href="#projects" data-view="projects">Projects</a>
+    <a href="#settings" data-view="settings">Settings</a>
+  </nav>
+  <main id="view"><div class="card empty">Opening your ledger…</div></main>
+  <footer id="note"></footer>
+</div>
+<div id="modal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="modal-title"></div>
+<div id="toast" role="status" hidden></div>
+<script src="app.js"></script>
+</body>
+</html>
