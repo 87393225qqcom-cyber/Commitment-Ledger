@@ -399,3 +399,15 @@ h1, h2, h3, .modal-card h2, .f-title h2 { letter-spacing: -0.01em; }
 .btn, .f-btn, .f-chip, .f-link, .choice, .chip, .label, .f-small, .dial-text { letter-spacing: 0; }
 .dial-text { font-size: 22px; }
 input, select, textarea, button { font-family: var(--body); }
+
+/* ---- focus: end-of-session panel (log output while stopping) ---- */
+.focus.wrapping .f-center, .focus.wrapping .f-targets { display: none; }
+.focus.wrapping .f-layer { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.focus.wrapping .dial { opacity: .35; }
+.f-wrap { background: var(--paper); border: 2px solid var(--fink); padding: 16px; display: flex; flex-direction: column; gap: 12px; animation: rise .22s ease-out; }
+.f-wrap .f-alert-head { color: var(--fink); }
+.f-field { display: flex; flex-direction: column; gap: 6px; }
+.f-field input { width: 100%; background: transparent; color: var(--fink); border: 1.5px solid var(--fink); border-radius: 0; padding: 10px 12px; font: 16px var(--fgrot); }
+.f-field input:focus { outline: 2px solid var(--fink); outline-offset: 1px; }
+.f-check { display: flex; gap: 10px; align-items: flex-start; font-size: 15px; cursor: pointer; }
+.f-check input { width: 20px; height: 20px; margin-top: 1px; accent-color: var(--fink); flex: none; }

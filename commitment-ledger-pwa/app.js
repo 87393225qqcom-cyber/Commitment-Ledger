@@ -237,7 +237,7 @@
     tick();
   }
   function closeFocus() {
-    focusOpen = false;
+    focusOpen = false; wrapUp = null;
     const el = document.getElementById('focus');
     el.hidden = true; el.innerHTML = '';
     if (document.getElementById('modal').hidden) document.body.classList.remove('modal-open');
@@ -304,15 +304,16 @@
           <span class="f-links"><button class="f-link" data-act="focus-test">Test sound</button><button class="f-link" data-act="focus-min">Minimize</button></span></div>
         <div class="f-title">${meta ? `<span class="f-small">${esc(meta)}</span>` : ''}<h2>${esc(t ? t.text : 'Focus session')}</h2></div>
         <div class="f-center"><div id="focus-time">--:--</div><div id="focus-sub" class="f-small"></div></div>
-        <div class="f-bottom">
+        <div class="f-bottom">${wrapUp ? wrapPanel() : `
           <div id="focus-alert" class="f-alert" role="alert" ${timer.alerted && !timer.ack ? '' : 'hidden'}>
             <p class="f-alert-head">● Time’s up</p><p>You reached your ${mins(timer.target)} target. Log it, or keep going.</p>
             <div class="f-row"><button class="f-btn inv" data-act="focus-add10">+10 min</button><button class="f-btn inv" data-act="focus-keep">Keep going</button><button class="f-btn inv solid" data-act="stop">Stop and log</button></div></div>
           <div class="f-targets"><span class="f-small">Target</span>
             ${[...new Set([...TARGETS, timer.target])].sort((a, b) => a - b).map(v => `<button class="f-chip" data-act="focus-target" data-v="${v}" aria-pressed="${v === timer.target}">${mins(v)}</button>`).join('')}</div>
-          <div class="f-row"><button class="f-btn" data-act="focus-done">Mark done</button><button class="f-btn solid" data-act="stop">Stop and log</button></div>
+          <div class="f-row"><button class="f-btn" data-act="focus-done">Mark done</button><button class="f-btn solid" data-act="stop">Stop and log</button></div>`}
         </div>
       </div>`;
+    el.classList.toggle('wrapping', !!wrapUp);
     dialTicks = [...el.querySelectorAll('.tk')].map(g => ({ g, f: Number(g.dataset.f), gone: false }));
     updateWake();
   }
@@ -322,6 +323,7 @@
     if (!timer) return;
     const s = Math.floor((Date.now() - timer.start) / 1000), targetS = timer.target * 60;
     const card = document.getElementById('clock'); if (card) card.textContent = clockText(s);
+    const we = document.getElementById('wr-elapsed'); if (we) we.textContent = mins(Math.max(1, Math.round(s / 60)));
     const over = s >= targetS;
     document.title = over ? `+${clockText(s - targetS)} · Focus` : `${clockText(targetS - s)} · Focus`;
     if (focusOpen) {
@@ -450,17 +452,10 @@
         const v = Number(b.dataset.v), passed = (Date.now() - timer.start) / 1000 >= v * 60;
         timer.target = v; timer.alerted = passed; timer.ack = true; saveTimer(); renderFocus(); tick(); break;
       }
-      case 'focus-done': {
-        const day = timer.day, tid = timer.taskId;
-        stopTimer();
-        const t = getDay(day).tasks.find(x => x.id === tid);
-        if (t && !t.done && !getDay(day).review.closed) {
-          mutateDay(day, d => { const x = d.tasks.find(y => y.id === tid); if (x) x.done = true; });
-          if (t.backlogId) setBacklogDone(t.backlogId, true);
-          toast('Done and logged.');
-        }
-        break;
-      }
+      case 'focus-done': openWrapUp(true); break;
+      case 'wrap-back': wrapUp = null; renderFocus(); tick(); break;
+      case 'wrap-skip': saveWrap(true); break;
+      case 'wrap-save': saveWrap(false); break;
     }
   });
 
@@ -511,6 +506,8 @@
     if (tc) meta.push(`<span class="cat-label cat-${tc}"><span class="cat-dot"></span>${esc(catName(tc))}</span>`);
     if (t.project && projectName(t.project)) meta.push(`<span class="tag">${esc(projectName(t.project))}</span>`);
     meta.push(`<span class="num">${t.minutes ? mins(t.minutes) : '0m'} / ${mins(t.est || 0)}</span>`);
+    const tw = (d.logs || []).filter(l => l.taskId === t.id && l.kind === 'words').reduce((a, l) => a + (l.value || 0), 0);
+    if (tw) meta.push(`<span class="num">${nf(tw)} words</span>`);
     if (t.late) meta.push('<span class="unplanned">unplanned</span>');
     if (t.dropped) meta.push(`<span>Dropped: ${esc(t.reason || 'no reason given')}</span>`);
     if (t.carried) meta.push('<span>carried over</span>');
@@ -544,8 +541,10 @@
 
   function logLine(l) {
     const p = projectOf(l.project);
+    const task = l.taskId ? Object.values(state.days).flatMap(d => d.tasks || []).find(t => t.id === l.taskId) : null;
     const what = l.kind === 'words' ? `${nf(l.value)} words` : l.kind === 'time' ? mins(l.value) : 'Done';
-    return `<b class="num">${esc(what)}</b> · ${esc(p ? p.name : 'Removed project')}${l.note ? ` · ${esc(l.note)}` : ''}`;
+    const where = p ? p.name : task ? task.text : 'Removed project';
+    return `<b class="num">${esc(what)}</b> · ${esc(where)}${l.note ? ` · ${esc(l.note)}` : ''}`;
   }
   function logPanel(k, d) {
     const ps = activeProjects();
@@ -1050,7 +1049,7 @@
         break;
       }
       case 'focus': startTimer(k, id); break;
-      case 'stop': stopTimer(); break;
+      case 'stop': openWrapUp(false); break;
       case 'drop': state.ui.dropping = id; render(); document.getElementById('drop-reason')?.focus(); break;
       case 'cancel-drop': state.ui.dropping = null; render(); break;
       case 'confirm-drop': {
@@ -1197,6 +1196,63 @@
   }
   setInterval(applyTheme, 60000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) applyTheme(); });
+
+  // ---------- ending a session: log output in the same step ----------
+  let wrapUp = null; // { done: bool } while the wrap-up panel is open
+  function openWrapUp(done) {
+    if (!timer) return;
+    wrapUp = { done: !!done };
+    if (!focusOpen) { unlockAudio(); openFocus(); } else { renderFocus(); tick(); }
+    setTimeout(() => { const el = document.getElementById('wr-words') || document.getElementById('wr-note'); if (el) el.focus(); }, 60);
+  }
+  function wrapPanel() {
+    const t = timerTask(), p = t && t.project ? projectOf(t.project) : null, metric = p ? projMetric(p) : null;
+    const open = metric === 'other' ? backlog().filter(b => b.project === p.id && !b.done && b.id !== (t && t.backlogId)) : [];
+    const timeNote = metric === 'time' ? ` It counts toward <b>${esc(p.name)}</b>.` : '';
+    return `<div class="f-wrap" role="dialog" aria-label="End session">
+      <p class="f-alert-head">Session: <span id="wr-elapsed">—</span></p>
+      <p class="f-small">Focus time is logged automatically.${timeNote}</p>
+      ${metric === 'words' ? `<label class="f-field"><span class="f-small">Words written this session · ${esc(p.name)}</span>
+        <input type="number" id="wr-words" min="0" step="1" inputmode="numeric" placeholder="e.g. 650"></label>` : ''}
+      ${open.length ? `<div class="f-field"><span class="f-small">Milestones finished · ${esc(p.name)}</span>
+        ${open.map(b => `<label class="f-check"><input type="checkbox" data-wr-ms="${b.id}"><span>${esc(b.text)}</span></label>`).join('')}</div>` : ''}
+      <label class="f-field"><span class="f-small">${metric === 'other' ? 'What did you complete?' : 'Note (optional)'}</span>
+        <input type="text" id="wr-note" maxlength="200" autocomplete="off" placeholder="${metric === 'other' ? 'e.g. Modeled the roof trusses' : metric === 'words' ? 'e.g. Finished the methods draft' : 'e.g. 5 km run, felt strong'}"></label>
+      <label class="f-check"><input type="checkbox" id="wr-done" ${wrapUp && wrapUp.done ? 'checked' : ''}><span><b>This task is finished</b></span></label>
+      <div class="f-row"><button class="f-btn" data-act="wrap-back">Back to timer</button><button class="f-btn" data-act="wrap-skip">Just stop</button><button class="f-btn solid" data-act="wrap-save">Save and stop</button></div>
+    </div>`;
+  }
+  function saveWrap(skip) {
+    if (!timer) return;
+    const day = timer.day, tid = timer.taskId, t = timerTask(), p = t && t.project ? projectOf(t.project) : null;
+    const m = Math.round((Date.now() - timer.start) / 60000);
+    let words = 0, note = '', ms = [], done = false;
+    if (!skip) {
+      words = Math.max(0, Math.round(Number(document.getElementById('wr-words')?.value) || 0));
+      note = (document.getElementById('wr-note')?.value || '').trim();
+      ms = [...document.querySelectorAll('[data-wr-ms]:checked')].map(x => x.dataset.wrMs);
+      done = !!document.getElementById('wr-done')?.checked;
+    }
+    wrapUp = null;
+    stopTimer(); // logs the minutes to the task and closes the timer
+    if (skip) return;
+    const at = new Date().toISOString(), entries = [];
+    if (words > 0) entries.push({ id: rid(), project: p ? p.id : null, taskId: tid, kind: 'words', value: words, note, at });
+    else if (note) entries.push({ id: rid(), project: p ? p.id : null, taskId: tid, kind: 'note', value: null, note, at });
+    const closed = getDay(day).review.closed;
+    if (entries.length || (done && !closed)) mutateDay(day, d => {
+      d.logs = (d.logs || []).concat(entries);
+      if (done && !d.review.closed) { const x = d.tasks.find(y => y.id === tid); if (x) x.done = true; }
+    });
+    ms.forEach(id => setBacklogDone(id, true));
+    if (done && !closed && t && t.backlogId) setBacklogDone(t.backlogId, true);
+    const parts = [m >= 1 ? `Logged ${mins(m)}` : 'Under a minute, no time logged'];
+    if (words) parts.push(`${nf(words)} words`);
+    if (ms.length) parts.push(`${ms.length} milestone${ms.length === 1 ? '' : 's'}`);
+    if (note && !words) parts.push('note saved');
+    if (done && !closed) parts.push('task done');
+    toast(parts.join(' · ') + '.');
+  }
 
   // ---------- in-app triggers (iOS can't schedule web notifications, so the app checks on open) ----------
   function setSetting(patch) { state.settings = Object.assign({}, state.settings, patch); Store.save(); }
