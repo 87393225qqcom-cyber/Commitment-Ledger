@@ -139,7 +139,7 @@
   // ---------- storage (this device only: localStorage) ----------
   const LOCAL = 'commitment-ledger.v1';
   const SCHEMA = 1;
-  const DEFAULT_SETTINGS = { appearance: 'time', dayFrom: 7, nightFrom: 19, dayStart: 0, alarmSound: 'celebration', morningBriefing: true, eveningSummary: true, eveningHour: 18, lastBriefing: null, lastEvening: null, lastBackup: null };
+  const DEFAULT_SETTINGS = { balanceLimit: 65, appearance: 'time', dayFrom: 7, nightFrom: 19, dayStart: 0, alarmSound: 'celebration', morningBriefing: true, eveningSummary: true, eveningHour: 18, lastBriefing: null, lastEvening: null, lastBackup: null };
   const Store = {
     backend: 'local', saveTimer: null, failed: false,
     init() {
@@ -323,6 +323,7 @@
     if (!timer) return;
     const s = Math.floor((Date.now() - timer.start) / 1000), targetS = timer.target * 60;
     const card = document.getElementById('clock'); if (card) card.textContent = clockText(s);
+    updateBalance();
     const we = document.getElementById('wr-elapsed'); if (we) we.textContent = mins(Math.max(1, Math.round(s / 60)));
     const over = s >= targetS;
     document.title = over ? `+${clockText(s - targetS)} · Focus` : `${clockText(targetS - s)} · Focus`;
@@ -477,6 +478,7 @@
     const v = document.getElementById('view');
     v.innerHTML = state.view === 'history' ? viewHistory() : state.view === 'projects' ? viewProjects() : state.view === 'settings' ? viewSettings() : viewToday();
     tick();
+    updateBalance(); startMiner();
 
     if (focusId) { const el = document.getElementById(focusId); if (el) { el.focus(); if (sel) try { el.setSelectionRange(sel[0], sel[1]); } catch (e) {} } }
   }
@@ -580,6 +582,8 @@
   function viewToday() {
     const k = todayKey(), d = getDay(k), s = stats(d);
     let h = '';
+
+    h += balanceCard();
 
     // 1 — commit
     h += `<section class="card"><div class="sec-head"><h2><span class="step">1</span>Commit</h2>
@@ -1254,6 +1258,130 @@
     toast(parts.join(' · ') + '.');
   }
 
+  // ---------- today's balance: live donut by category + pixel miner ----------
+  const BAL_CATS = [
+    { id: 'passion', color: 'var(--passion)' }, { id: 'must', color: 'var(--must)' },
+    { id: 'baseline', color: 'var(--baseline)' }, { id: 'none', color: 'var(--muted)' }
+  ];
+  const BAL_MIN_TOTAL = 30; // minutes before the balance check starts, so one early session doesn't trigger it
+  function catMinutes(k) {
+    const d = getDay(k), out = { passion: 0, must: 0, baseline: 0, none: 0 };
+    (d.tasks || []).forEach(t => { out[taskCat(t) || 'none'] += t.minutes || 0; });
+    (d.logs || []).forEach(l => { if (l.kind === 'time') { const p = projectOf(l.project); out[p ? projCat(p) : 'none'] += l.value || 0; } });
+    if (timer && timer.day === k) { const t = timerTask(); out[(t && taskCat(t)) || 'none'] += (Date.now() - timer.start) / 60000; }
+    return out;
+  }
+  function balanceCard() {
+    return `<section class="card balance"><div class="sec-head"><h2>Today’s balance</h2><span class="chip" id="bal-total">0m</span></div>
+      <div class="bal-wrap">
+        <div class="donut">
+          <svg id="donut" viewBox="0 0 200 200" role="img" aria-label="Today's time by category"><circle class="donut-bg" cx="100" cy="100" r="80"/><g id="donut-arcs" transform="rotate(-90 100 100)"></g></svg>
+          <canvas id="miner" width="96" height="72" aria-hidden="true"></canvas>
+          <span id="miner-state" class="miner-state"></span>
+        </div>
+        <ul class="bal-legend" id="bal-legend"></ul>
+      </div>
+      <p id="bal-nudge" class="bal-nudge" role="status" hidden></p></section>`;
+  }
+  const nudged = {};
+  function updateBalance() {
+    const svg = document.getElementById('donut-arcs'); if (!svg) return;
+    const k = todayKey(), m = catMinutes(k), total = m.passion + m.must + m.baseline + m.none;
+    const limit = (state.settings.balanceLimit || 65) / 100, C = 2 * Math.PI * 80;
+    let over = null, at = 0, arcs = '';
+    if (total > 0) BAL_CATS.forEach(c => {
+      const f = m[c.id] / total; if (f <= 0) return;
+      const isOver = c.id !== 'none' && total >= BAL_MIN_TOTAL && f > limit;
+      if (isOver) over = { id: c.id, f };
+      const len = Math.max(0, f * C - (f < 1 ? 2.5 : 0));
+      arcs += `<circle class="donut-seg${isOver ? ' over' : ''}" cx="100" cy="100" r="80" stroke="${c.color}" stroke-dasharray="${len.toFixed(2)} ${C.toFixed(2)}" stroke-dashoffset="${(-at * C).toFixed(2)}"/>`;
+      at += f;
+    });
+    svg.innerHTML = arcs;
+    document.getElementById('bal-total').textContent = `${mins(Math.round(total))} today`;
+    const name = id => id === 'none' ? 'No category' : catName(id);
+    document.getElementById('bal-legend').innerHTML = BAL_CATS.filter(c => c.id !== 'none' || m.none >= 1).map(c => {
+      const f = total ? m[c.id] / total : 0, isOver = over && over.id === c.id;
+      return `<li class="${c.id === 'none' ? '' : 'cat-' + c.id}"><span class="cat-dot" style="background:${c.color}"></span><span class="bal-name">${esc(name(c.id))}</span>
+        <span class="num">${mins(Math.round(m[c.id]))}</span><span class="num bal-pct ${isOver ? 'late' : ''}">${total ? Math.round(f * 100) + '%' : '—'}</span></li>`;
+    }).join('');
+    const n = document.getElementById('bal-nudge');
+    if (over) {
+      const pct = Math.round(over.f * 100), lim = Math.round(limit * 100);
+      const tip = { passion: 'Great energy. Check that today’s Must-do items don’t slip.', must: 'Leave room for something you love, or take a Baseline break.', baseline: 'Upkeep is crowding out the real work. Guard time for Must-do and Passion projects.' }[over.id];
+      n.innerHTML = `<span class="chip warn">Over ${lim}%</span> <b>${esc(catName(over.id))}</b> is ${pct}% of today’s time. ${tip}`;
+      n.hidden = false;
+      const key = k + ':' + over.id;
+      if (!nudged[key]) { nudged[key] = true; toast(`${catName(over.id)} has passed ${lim}% of today’s time.`); }
+    } else n.hidden = true;
+    const ms = document.getElementById('miner-state'); if (ms) ms.textContent = timer ? 'Mining…' : 'Zzz… idle';
+  }
+
+  // Pixel miner, drawn on a 24×18 grid (4 px cells). Original sprite, coloured by fixed palette.
+  const PAL = { helmet: '#f2c230', lamp: '#fff3a0', lampOff: '#8f7f3c', skin: '#f0c08a', eye: '#1b1b1b', shirt: '#2f6f9f', pants: '#3a3a46', boot: '#2a2016', handle: '#8a5a2b', metal: '#b9bec6', rock: '#77736c', rockHi: '#a39f96', ore: '#e0b020', spark: '#ffe066', z: '#8d8c87' };
+  let minerRAF = null, minerLast = 0, minerFrame = 0;
+  function drawMiner(cv, mining, fr) {
+    const g = cv.getContext('2d'), S = 4;
+    g.clearRect(0, 0, cv.width, cv.height);
+    const px = (x, y, c) => { g.fillStyle = c; g.fillRect(Math.round(x) * S, Math.round(y) * S, S, S); };
+    const rect = (x, y, w, h, c) => { for (let i = 0; i < w; i++) for (let j = 0; j < h; j++) px(x + i, y + j, c); };
+    // rock with ore
+    rect(16, 12, 6, 5, PAL.rock); rect(17, 11, 4, 1, PAL.rock); rect(17, 12, 2, 1, PAL.rockHi); rect(16, 13, 1, 2, PAL.rockHi);
+    px(19, 14, PAL.ore); px(20, 12, PAL.ore); px(18, 16, PAL.ore);
+    if (mining) {
+      const swing = [-115, -95, -70, -35, 5, 18, 18, -40]; // degrees, 0 = pointing right
+      const f = fr % swing.length, hit = f === 5 || f === 6, dip = hit ? 1 : 0;
+      // legs, boots
+      rect(5, 14 + dip, 2, 3 - dip, PAL.pants); rect(9, 14 + dip, 2, 3 - dip, PAL.pants); rect(5, 14 + dip, 6, 1, PAL.pants);
+      rect(4, 17, 3, 1, PAL.boot); rect(9, 17, 3, 1, PAL.boot);
+      // torso, head, helmet
+      rect(5, 9 + dip, 6, 5, PAL.shirt);
+      rect(6, 5 + dip, 5, 4, PAL.skin); px(9, 6 + dip, PAL.eye);
+      rect(5, 4 + dip, 7, 1, PAL.helmet); rect(6, 3 + dip, 5, 1, PAL.helmet); px(11, 3 + dip, PAL.lamp);
+      // arm to the hand, then the pickaxe rotating around the hand
+      const hx = 12, hy = 10 + dip; rect(10, 10 + dip, 2, 1, PAL.skin); px(hx, hy, PAL.skin);
+      const a = swing[f] * Math.PI / 180, L = 7;
+      for (let i = 1; i <= L; i++) px(hx + Math.cos(a) * i, hy + Math.sin(a) * i, PAL.handle);
+      const ex = hx + Math.cos(a) * L, ey = hy + Math.sin(a) * L, nx = -Math.sin(a), ny = Math.cos(a);
+      for (let i = -2; i <= 2; i++) px(ex + nx * i, ey + ny * i, PAL.metal);
+      if (hit) { // sparks and chips on impact
+        const sp = f === 5 ? [[15, 10], [14, 8], [17, 9], [13, 11]] : [[16, 8], [14, 7], [18, 7], [12, 10]];
+        sp.forEach(([x, y]) => px(x, y, PAL.spark));
+        px(15 - (f - 4), 12 - (f - 4), PAL.rockHi);
+      }
+    } else {
+      const breath = (fr % 4) < 2 ? 0 : 1;
+      // pickaxe lying on the ground
+      rect(12, 17, 7, 1, PAL.handle); rect(18, 16, 1, 1, PAL.metal); rect(19, 15, 1, 3, PAL.metal);
+      // seated miner leaning against the rock, legs out
+      rect(4, 16, 7, 2, PAL.pants); rect(11, 16, 2, 2, PAL.boot);
+      rect(4, 10 + breath, 5, 6 - breath, PAL.shirt);
+      rect(4, 6 + breath, 5, 4, PAL.skin); rect(6, 8 + breath, 2, 1, PAL.eye); // closed eyes
+      rect(3, 5 + breath, 7, 1, PAL.helmet); rect(4, 4 + breath, 5, 1, PAL.helmet); px(9, 5 + breath, PAL.lampOff);
+      rect(9, 13, 2, 1, PAL.skin); // resting hand
+      // floating Zs
+      const z = (x, y) => { rect(x, y, 3, 1, PAL.z); px(x + 1, y + 1, PAL.z); rect(x, y + 2, 3, 1, PAL.z); };
+      const t = fr % 6;
+      z(11 + Math.floor(t / 2), 4 - Math.floor(t / 2));
+      if (t >= 3) z(14 + Math.floor((t - 3) / 2), 1);
+    }
+  }
+  function minerLoop(ts) {
+    const cv = document.getElementById('miner');
+    if (!cv || document.hidden) { minerRAF = null; return; }
+    const mining = !!timer;
+    if (ts - minerLast > 1000 / (mining ? 8 : 3)) { minerLast = ts; minerFrame++; drawMiner(cv, mining, minerFrame); }
+    minerRAF = requestAnimationFrame(minerLoop);
+  }
+  function startMiner() {
+    const cv = document.getElementById('miner'); if (!cv) return;
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) { drawMiner(cv, !!timer, 0); return; }
+    drawMiner(cv, !!timer, minerFrame);
+    if (!minerRAF) minerRAF = requestAnimationFrame(minerLoop);
+  }
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) startMiner(); });
+  setInterval(() => { if (!timer) updateBalance(); }, 60000);
+
   // ---------- in-app triggers (iOS can't schedule web notifications, so the app checks on open) ----------
   function setSetting(patch) { state.settings = Object.assign({}, state.settings, patch); Store.save(); }
   function triggers() {
@@ -1311,6 +1439,7 @@
     if (t.id === 'set-morning') { setSetting({ morningBriefing: t.checked }); render(); }
     if (t.id === 'set-evening') { setSetting({ eveningSummary: t.checked }); render(); }
     if (t.id === 'set-hour') { setSetting({ eveningHour: Number(t.value) }); render(); }
+    if (t.id === 'set-balance') { setSetting({ balanceLimit: Number(t.value) }); render(); }
     if (t.id === 'set-appearance') { setSetting({ appearance: t.value }); applyTheme(); render(); }
     if (t.id === 'set-dayfrom') { setSetting({ dayFrom: Number(t.value) }); applyTheme(); render(); }
     if (t.id === 'set-nightfrom') { setSetting({ nightFrom: Number(t.value) }); applyTheme(); render(); }
@@ -1334,6 +1463,10 @@
       ${ap === 'time' ? `<div class="row"><label for="set-dayfrom" class="small">Day from</label><select id="set-dayfrom">${hourOpts([5, 6, 7, 8, 9, 10], st.dayFrom ?? 7)}</select>
         <label for="set-nightfrom" class="small">Night from</label><select id="set-nightfrom">${hourOpts([16, 17, 18, 19, 20, 21, 22], st.nightFrom ?? 19)}</select></div>` : ''}
       <p class="muted small">${ap === 'system' ? 'Matches your phone. On iPhone, Settings → Display & Brightness → Automatic switches at sunset.' : ap === 'time' ? 'The whole app, focus timer included, switches automatically at these times.' : 'Stays this way all day.'}</p></section>`;
+    h += `<section class="card"><div class="sec-head"><h2>Balance warning</h2></div>
+      <div class="row"><label for="set-balance" class="small">Warn when one category passes</label>
+        <select id="set-balance">${[60, 65, 70, 75, 80].map(x => `<option value="${x}"${x === (st.balanceLimit || 65) ? ' selected' : ''}>${x}%</option>`).join('')}</select></div>
+      <p class="muted small">Checked once you have ${BAL_MIN_TOTAL} minutes logged today. The ring segment pulses and a note suggests how to rebalance.</p></section>`;
     h += `<section class="card"><div class="sec-head"><h2>Daily check-ins</h2></div>
       <p class="muted small">iPhone web apps can’t send scheduled notifications, so the ledger checks in when you open it.</p>
       <label class="toggle"><input type="checkbox" id="set-morning" ${st.morningBriefing ? 'checked' : ''}><span><b>Morning briefing</b><br><span class="muted small">On your first open of the day: yesterday’s result, deadlines, stale projects.</span></span></label>
