@@ -231,7 +231,8 @@
     focusOpen = true;
     const el = document.getElementById('focus');
     renderFocus(); el.hidden = false;
-    document.body.classList.add('modal-open');
+    // Hide the home screen underneath and pause the miner: on iPhone an animating canvas can paint through a fixed overlay.
+    document.body.classList.add('modal-open', 'focus-open');
     requestWakeLock();
     try { if (el.requestFullscreen && !document.fullscreenElement && !isStandalone()) el.requestFullscreen().catch(() => {}); } catch (e) {}
     tick();
@@ -240,7 +241,9 @@
     focusOpen = false; wrapUp = null;
     const el = document.getElementById('focus');
     el.hidden = true; el.innerHTML = '';
+    document.body.classList.remove('focus-open');
     if (document.getElementById('modal').hidden) document.body.classList.remove('modal-open');
+    setTimeout(startMiner, 0);
     releaseWakeLock();
     try { if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); } catch (e) {}
   }
@@ -475,6 +478,7 @@
     const sel = focusId && 'selectionStart' in ae ? [ae.selectionStart, ae.selectionEnd] : null;
 
     const v = document.getElementById('view');
+    syncAffirm();
     v.innerHTML = state.view === 'history' ? viewHistory() : state.view === 'projects' ? viewProjects() : state.view === 'settings' ? viewSettings() : viewToday();
     tick();
     updateBalance(); startMiner();
@@ -1272,7 +1276,7 @@
       <div class="bal-wrap">
         <div class="donut">
           <svg id="donut" viewBox="0 0 200 200" role="img" aria-label="Today's time by category"><circle class="donut-bg" cx="100" cy="100" r="80"/><g id="donut-arcs" transform="rotate(-90 100 100)"></g></svg>
-          <canvas id="miner" width="96" height="72" aria-hidden="true"></canvas>
+          <canvas id="miner" width="96" height="88" aria-hidden="true"></canvas>
           <span id="miner-state" class="miner-state"></span>
         </div>
         <ul class="bal-legend" id="bal-legend"></ul>
@@ -1353,55 +1357,132 @@
   // Pixel miner, drawn on a 24×18 grid (4 px cells). Original sprite, coloured by fixed palette.
   const PAL = { helmet: '#f2c230', lamp: '#fff3a0', lampOff: '#8f7f3c', skin: '#f0c08a', eye: '#1b1b1b', shirt: '#2f6f9f', pants: '#3a3a46', boot: '#2a2016', handle: '#8a5a2b', metal: '#b9bec6', rock: '#77736c', rockHi: '#a39f96', ore: '#e0b020', spark: '#ffe066', z: '#8d8c87' };
   let minerRAF = null, minerLast = 0, minerFrame = 0;
-  function drawMiner(cv, mining, fr) {
-    const g = cv.getContext('2d'), S = 4;
-    g.clearRect(0, 0, cv.width, cv.height);
-    const px = (x, y, c) => { g.fillStyle = c; g.fillRect(Math.round(x) * S, Math.round(y) * S, S, S); };
-    const rect = (x, y, w, h, c) => { for (let i = 0; i < w; i++) for (let j = 0; j < h; j++) px(x + i, y + j, c); };
-    // rock with ore
-    rect(16, 12, 6, 5, PAL.rock); rect(17, 11, 4, 1, PAL.rock); rect(17, 12, 2, 1, PAL.rockHi); rect(16, 13, 1, 2, PAL.rockHi);
-    px(19, 14, PAL.ore); px(20, 12, PAL.ore); px(18, 16, PAL.ore);
-    if (mining) {
-      const swing = [-115, -95, -70, -35, 5, 18, 18, -40]; // degrees, 0 = pointing right
-      const f = fr % swing.length, hit = f === 5 || f === 6, dip = hit ? 1 : 0;
-      // legs, boots
+  // Standing miner. The arm and pickaxe are one piece that rotates at the shoulder, so they swing together.
+  // Simplified miner for tiny icons (18-pixel grid).
+  function drawSimpleMiner(px, rect, dip, angle) {
+    const body = () => {
       rect(5, 14 + dip, 2, 3 - dip, PAL.pants); rect(9, 14 + dip, 2, 3 - dip, PAL.pants); rect(5, 14 + dip, 6, 1, PAL.pants);
       rect(4, 17, 3, 1, PAL.boot); rect(9, 17, 3, 1, PAL.boot);
-      // torso, head, helmet
       rect(5, 9 + dip, 6, 5, PAL.shirt);
       rect(6, 5 + dip, 5, 4, PAL.skin); px(9, 6 + dip, PAL.eye);
       rect(5, 4 + dip, 7, 1, PAL.helmet); rect(6, 3 + dip, 5, 1, PAL.helmet); px(11, 3 + dip, PAL.lamp);
-      // arm to the hand, then the pickaxe rotating around the hand
-      const hx = 12, hy = 10 + dip; rect(10, 10 + dip, 2, 1, PAL.skin); px(hx, hy, PAL.skin);
-      const a = swing[f] * Math.PI / 180, L = 7;
-      for (let i = 1; i <= L; i++) px(hx + Math.cos(a) * i, hy + Math.sin(a) * i, PAL.handle);
-      const ex = hx + Math.cos(a) * L, ey = hy + Math.sin(a) * L, nx = -Math.sin(a), ny = Math.cos(a);
+    };
+    const tool = () => {
+      const a = angle * Math.PI / 180, cx = Math.cos(a), cy = Math.sin(a), sx = 10, sy = 10 + dip, ARM = 3, HANDLE = 6;
+      const hx = sx + cx * ARM, hy = sy + cy * ARM;
+      for (let i = 1; i <= HANDLE; i++) px(hx + cx * i, hy + cy * i, PAL.handle);
+      const ex = hx + cx * HANDLE, ey = hy + cy * HANDLE, nx = -cy, ny = cx;
       for (let i = -2; i <= 2; i++) px(ex + nx * i, ey + ny * i, PAL.metal);
-      if (hit) { // sparks and chips on impact
-        const sp = f === 5 ? [[15, 10], [14, 8], [17, 9], [13, 11]] : [[16, 8], [14, 7], [18, 7], [12, 10]];
-        sp.forEach(([x, y]) => px(x, y, PAL.spark));
-        px(15 - (f - 4), 12 - (f - 4), PAL.rockHi);
-      }
-    } else {
-      const breath = (fr % 4) < 2 ? 0 : 1;
-      // pickaxe lying on the ground
-      rect(12, 17, 7, 1, PAL.handle); rect(18, 16, 1, 1, PAL.metal); rect(19, 15, 1, 3, PAL.metal);
-      // seated miner leaning against the rock, legs out
-      rect(4, 16, 7, 2, PAL.pants); rect(11, 16, 2, 2, PAL.boot);
-      rect(4, 10 + breath, 5, 6 - breath, PAL.shirt);
-      rect(4, 6 + breath, 5, 4, PAL.skin); rect(6, 8 + breath, 2, 1, PAL.eye); // closed eyes
-      rect(3, 5 + breath, 7, 1, PAL.helmet); rect(4, 4 + breath, 5, 1, PAL.helmet); px(9, 5 + breath, PAL.lampOff);
-      rect(9, 13, 2, 1, PAL.skin); // resting hand
-      // floating Zs
-      const z = (x, y) => { rect(x, y, 3, 1, PAL.z); px(x + 1, y + 1, PAL.z); rect(x, y + 2, 3, 1, PAL.z); };
-      const t = fr % 6;
-      z(11 + Math.floor(t / 2), 4 - Math.floor(t / 2));
-      if (t >= 3) z(14 + Math.floor((t - 3) / 2), 1);
-    }
+      for (let i = 0; i <= ARM; i++) px(sx + cx * i, sy + cy * i, i === 0 ? PAL.shirt : PAL.skin); // sleeve, forearm, hand on the handle
+    };
+    // Raised overhead the arm passes behind the head; on the downswing it's in front of the body.
+    if (angle < -60) { tool(); body(); } else { body(); tool(); }
   }
+  function minerPainter(g, S, ox = 0, oy = 0) {
+    const px = (x, y, c) => { g.fillStyle = c; g.fillRect((Math.round(x) + ox) * S, (Math.round(y) + oy) * S, S, S); };
+    const rect = (x, y, w, h, c) => { for (let i = 0; i < w; i++) for (let j = 0; j < h; j++) px(x + i, y + j, c); };
+    return { px, rect };
+  }
+  // ---- Detailed miner: 48×44 pixel grid (2 px cells on a 96×88 canvas) ----
+  // SPRITE-START (also used by the icon generator)
+  const PX = {
+    helmet: '#f2c230', helmetHi: '#ffe27a', helmetSh: '#c4951b', lampRim: '#4a4a4a', lamp: '#fff3a0', lampOff: '#8f7f3c', beam: 'rgba(255,243,160,0.28)',
+    skin: '#f0c08a', skinSh: '#d39b68', eye: '#1b1b1b', brow: '#5a3a22', mouth: '#a5603f',
+    shirt: '#2f6f9f', shirtSh: '#245a82', strap: '#7a4a22', belt: '#4a3018', buckle: '#e0b020',
+    pants: '#3a3a46', pantsSh: '#2a2a34', boot: '#2a2016', sole: '#120e09', glove: '#6b4423',
+    handle: '#8a5a2b', handleHi: '#a8743c', metal: '#b9bec6', metalSh: '#7c8290',
+    rock: '#77736c', rockHi: '#a39f96', rockSh: '#5a5751', crack: '#43403b', ore: '#e0b020', oreHi: '#ffe066', spark: '#ffe066', z: '#8d8c87'
+  };
+  // Standing miner. Arm and pickaxe are one piece rotating at the front shoulder (24, 19), drawn in front of the body for the whole swing.
+  function drawDetailedMiner(px, rect, dip, angle, lampOn) {
+    const d = dip;
+    const body = () => {
+      rect(9, 39, 7, 4, PX.boot); rect(9, 43, 8, 1, PX.sole); rect(19, 39, 7, 4, PX.boot); rect(19, 43, 8, 1, PX.sole);
+      rect(11, 30 + d, 4, 9 - d, PX.pants); rect(20, 30 + d, 4, 9 - d, PX.pants); rect(14, 30 + d, 1, 9 - d, PX.pantsSh); rect(23, 30 + d, 1, 9 - d, PX.pantsSh);
+      rect(11, 28 + d, 13, 3, PX.pants);
+      rect(10, 27 + d, 15, 2, PX.belt); rect(16, 27 + d, 3, 2, PX.buckle);
+      rect(10, 17 + d, 15, 10, PX.shirt); rect(23, 17 + d, 2, 10, PX.shirtSh);
+      rect(12, 17 + d, 2, 10, PX.strap); rect(20, 17 + d, 2, 10, PX.strap);
+      rect(15, 15 + d, 5, 2, PX.skinSh);
+      rect(12, 7 + d, 11, 9, PX.skin); rect(12, 7 + d, 2, 9, PX.skinSh); rect(14, 10 + d, 2, 3, PX.skinSh);
+      rect(18, 9 + d, 3, 1, PX.brow); rect(19, 10 + d, 2, 2, PX.eye); rect(23, 11 + d, 1, 2, PX.skin); rect(18, 14 + d, 3, 1, PX.mouth);
+      rect(12, 2 + d, 10, 4, PX.helmet); rect(13, 1 + d, 8, 1, PX.helmet); rect(14, 2 + d, 4, 1, PX.helmetHi); rect(13, 3 + d, 1, 2, PX.helmetHi);
+      rect(10, 6 + d, 15, 2, PX.helmetSh);
+      rect(22, 3 + d, 2, 3, PX.lampRim); rect(24, 3 + d, 2, 3, lampOn ? PX.lamp : PX.lampOff);
+      if (lampOn) for (let k = 0; k < 12; k++) for (let y = Math.floor(3 - k / 3); y <= Math.ceil(5 + k / 3); y++) px(26 + k, y + d, PX.beam);
+    };
+    const tool = () => {
+      const a = angle * Math.PI / 180, cx = Math.cos(a), cy = Math.sin(a), nx = -cy, ny = cx, sx = 24, sy = 19 + d, ARM = 7, HANDLE = 10;
+      const thick = (x, y, w, c) => { for (let o = -(w - 1) / 2; o <= (w - 1) / 2 + 0.01; o += 1) px(x + nx * o, y + ny * o, c); };
+      const hx = sx + cx * ARM, hy = sy + cy * ARM;
+      for (let i = -1; i <= HANDLE; i += 0.5) { thick(hx + cx * i, hy + cy * i, 2, PX.handle); px(hx + cx * i - nx * 0.5, hy + cy * i - ny * 0.5, PX.handleHi); }
+      const ex = hx + cx * HANDLE, ey = hy + cy * HANDLE;
+      for (let i = -6; i <= 6; i += 0.5) { // curved pick head, two cells deep, darker at the points
+        const back = -Math.abs(i) * 0.25, x = ex + nx * i + cx * back, y = ey + ny * i + cy * back, tip = Math.abs(i) > 4.5;
+        px(x, y, tip ? PX.metalSh : PX.metal); px(x - cx, y - cy, PX.metalSh);
+      }
+      for (let i = 0; i <= ARM; i += 0.5) thick(sx + cx * i, sy + cy * i, 3, i < 3 ? PX.shirt : PX.skin); // sleeve, then forearm
+      for (let i = ARM - 1; i <= ARM + 1; i += 0.5) thick(sx + cx * i, sy + cy * i, 3, PX.glove);       // gloved hand on the handle
+    };
+    body(); tool();
+  }
+  function drawRock(px, rect) {
+    rect(34, 31, 12, 12, PX.rock); rect(35, 29, 9, 2, PX.rock); rect(33, 34, 1, 8, PX.rock);
+    rect(45, 32, 1, 11, PX.rockSh); rect(34, 42, 12, 1, PX.rockSh); rect(36, 30, 4, 1, PX.rockHi); rect(34, 32, 2, 4, PX.rockHi);
+    rect(39, 34, 2, 2, PX.ore); px(39, 34, PX.oreHi); rect(43, 31, 2, 1, PX.ore); rect(37, 39, 2, 2, PX.ore); px(42, 38, PX.ore);
+    px(41, 33, PX.crack); px(42, 34, PX.crack); px(42, 35, PX.crack); px(43, 36, PX.crack);
+  }
+  function drawSleepingMiner(px, rect, breath, fr) {
+    const b = breath;
+    rect(3, 42, 22, 1, PX.handle); rect(24, 38, 2, 5, PX.metal); px(24, 38, PX.metalSh); px(25, 42, PX.metalSh);
+    rect(13, 37, 13, 4, PX.pants); rect(13, 40, 13, 1, PX.pantsSh); rect(26, 34, 4, 7, PX.boot); rect(30, 34, 1, 7, PX.sole);
+    rect(8, 25 + b, 12, 12 - b, PX.shirt); rect(18, 25 + b, 2, 12 - b, PX.shirtSh); rect(10, 25 + b, 2, 12 - b, PX.strap); rect(15, 25 + b, 2, 12 - b, PX.strap);
+    rect(8, 36, 12, 2, PX.belt); rect(13, 36, 2, 2, PX.buckle);
+    rect(9, 31, 3, 4, PX.shirt); rect(11, 32, 8, 2, PX.skin); rect(18, 32, 2, 2, PX.glove); // folded arms
+    rect(9, 16 + b, 10, 9, PX.skin); rect(9, 16 + b, 2, 9, PX.skinSh); rect(14, 21 + b, 3, 1, PX.eye); rect(15, 23 + b, 2, 1, PX.mouth);
+    rect(9, 12 + b, 9, 4, PX.helmet); rect(10, 11 + b, 7, 1, PX.helmet); rect(11, 12 + b, 3, 1, PX.helmetHi); rect(7, 16 + b, 13, 2, PX.helmetSh);
+    rect(18, 13 + b, 2, 3, PX.lampRim); rect(20, 13 + b, 2, 3, PX.lampOff);
+    const z = (x, y, c) => { rect(x, y, 5, 1, c); px(x + 3, y + 1, c); px(x + 2, y + 2, c); px(x + 1, y + 3, c); rect(x, y + 4, 5, 1, c); };
+    const t = fr % 6;
+    z(22 + t, 10 - t, PX.z);
+    if (t >= 3) z(30 + (t - 3), 2, PX.z);
+  }
+  // SPRITE-END
+  function drawMiner(cv, mining, fr) {
+    const g = cv.getContext('2d');
+    g.clearRect(0, 0, cv.width, cv.height);
+    const { px, rect } = minerPainter(g, 2);
+    drawRock(px, rect);
+    if (mining) {
+      const swing = [-80, -70, -55, -30, 0, 16, 16, -45];
+      const f = fr % swing.length, hit = f === 5 || f === 6;
+      drawDetailedMiner(px, rect, hit ? 1 : 0, swing[f], true);
+      if (hit) {
+        const sp = f === 5 ? [[35, 26], [33, 23], [38, 24], [31, 27], [36, 21]] : [[37, 22], [33, 20], [40, 21], [30, 25], [35, 18]];
+        sp.forEach(([x, y]) => rect(x, y, 2, 2, PX.spark));
+        rect(32 - (f - 4) * 2, 30 - (f - 4) * 2, 2, 2, PX.rockHi);
+      }
+    } else drawSleepingMiner(px, rect, (fr % 4) < 2 ? 0 : 1, fr);
+  }
+  // Simplified icon: the miner with his pickaxe raised, no rock, on an 18×18 grid.
+  function drawMinerIcon(cv) {
+    const g = cv.getContext('2d'), S = Math.floor(cv.width / 18);
+    g.clearRect(0, 0, cv.width, cv.height);
+    const { px, rect } = minerPainter(g, S, -2, 0);
+    drawSimpleMiner(px, rect, 0, -55);
+  }
+  (function minerIcons() {
+    document.querySelectorAll('canvas.tab-icon').forEach(drawMinerIcon);
+    try { // browser-tab icon
+      const c = document.createElement('canvas'); c.width = c.height = 72; drawMinerIcon(c);
+      let link = document.querySelector('link[rel="icon"]');
+      if (!link) { link = document.createElement('link'); link.rel = 'icon'; document.head.appendChild(link); }
+      link.type = 'image/png'; link.removeAttribute('sizes'); link.href = c.toDataURL('image/png');
+    } catch (e) {}
+  })();
   function minerLoop(ts) {
     const cv = document.getElementById('miner');
-    if (!cv || document.hidden) { minerRAF = null; return; }
+    if (!cv || document.hidden || focusOpen) { minerRAF = null; return; }
     const mining = !!timer;
     if (ts - minerLast > 1000 / (mining ? 8 : 3)) { minerLast = ts; minerFrame++; drawMiner(cv, mining, minerFrame); }
     minerRAF = requestAnimationFrame(minerLoop);
@@ -1414,6 +1495,37 @@
   }
   document.addEventListener('visibilitychange', () => { if (!document.hidden) startMiner(); });
   setInterval(() => { if (!timer) updateBalance(); }, 60000);
+
+  // ---------- note to self (top of Today; saved on this device with the rest of your data) ----------
+  function affirmMeta() {
+    const a = state.settings.affirmation;
+    if (!a || !a.text) return '';
+    if (a.date === todayKey()) return 'saved today';
+    return `from ${shortDate(a.date)} · edit it for today`;
+  }
+  function autosize(ta) { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; }
+  function syncAffirm() {
+    const box = document.getElementById('affirm'), ta = document.getElementById('affirm-text'); if (!box || !ta) return;
+    box.hidden = !state.ready || state.view !== 'today';
+    if (box.hidden) return;
+    const a = state.settings.affirmation || {};
+    if (document.activeElement !== ta) ta.value = a.text || '';
+    document.getElementById('affirm-meta').textContent = affirmMeta();
+    autosize(ta);
+  }
+  let affirmTimer = null;
+  document.addEventListener('input', e => {
+    if (e.target.id !== 'affirm-text') return;
+    const ta = e.target; autosize(ta);
+    document.getElementById('affirm-meta').textContent = 'saving…';
+    clearTimeout(affirmTimer);
+    affirmTimer = setTimeout(() => {
+      setSetting({ affirmation: { text: ta.value.trim() ? ta.value : '', date: todayKey() } });
+      Store.flush();
+      document.getElementById('affirm-meta').textContent = ta.value.trim() ? 'saved ✓' : '';
+    }, 500);
+  });
+  document.addEventListener('keydown', e => { if (e.target.id === 'affirm-text' && e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); e.target.blur(); } });
 
   // ---------- in-app triggers (iOS can't schedule web notifications, so the app checks on open) ----------
   function setSetting(patch) { state.settings = Object.assign({}, state.settings, patch); Store.save(); }

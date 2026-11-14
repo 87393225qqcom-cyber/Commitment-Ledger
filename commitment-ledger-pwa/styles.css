@@ -414,8 +414,8 @@ input, select, textarea, button { font-family: var(--body); }
 .donut-seg { fill: none; stroke-width: 20; transition: stroke-dasharray .6s ease, stroke-dashoffset .6s ease; }
 .donut-seg.over { stroke-width: 26; animation: seg-pulse 1.6s ease-in-out infinite; }
 @keyframes seg-pulse { 50% { opacity: .45; } }
-#miner { position: absolute; left: 50%; top: 47%; width: 96px; height: 72px; transform: translate(-50%, -50%); image-rendering: pixelated; image-rendering: crisp-edges; }
-.miner-state { position: absolute; left: 0; right: 0; top: calc(47% + 42px); text-align: center; font-size: 11px; font-weight: 700; color: var(--muted); }
+#miner { position: absolute; left: 50%; top: 46%; width: 96px; height: 88px; transform: translate(-50%, -50%); image-rendering: pixelated; image-rendering: crisp-edges; }
+.miner-state { position: absolute; left: 0; right: 0; top: calc(46% + 46px); text-align: center; font-size: 11px; font-weight: 700; color: var(--muted); }
 .bal-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; flex: 1 1 160px; min-width: 0; }
 .bal-legend li { display: grid; grid-template-columns: auto 1fr auto auto; gap: 8px; align-items: center; font-size: 14px; }
 .bal-legend .cat-dot { margin: 0; width: 10px; height: 10px; }
@@ -436,3 +436,21 @@ input, select, textarea, button { font-family: var(--body); }
 .ap-meter span { background: var(--cat, var(--ink)); }
 .session-strip { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; border: 2px solid var(--ink); padding: 10px 12px; }
 .session-strip #clock { font-variant-numeric: tabular-nums; }
+
+/* The full-screen timer owns the screen: hide the page under it and keep it on its own layer. */
+body.focus-open .wrap { visibility: hidden; }
+.focus { isolation: isolate; transform: translateZ(0); }
+
+/* Pixel miner as the Today tab icon */
+nav.tabs a[data-view="today"] { display: inline-flex; align-items: center; gap: 6px; }
+.tab-icon { width: 18px; height: 18px; image-rendering: pixelated; image-rendering: crisp-edges; flex: none; }
+
+/* ---- note to self: a typed slip of paper at the top of Today ---- */
+.affirm { display: flex; flex-direction: column; gap: 2px; border-left: 3px solid var(--ink); padding: 6px 0 6px 12px; }
+.affirm-label { display: flex; justify-content: space-between; gap: 10px; font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: 0.04em; }
+.affirm-label span:first-child { text-transform: uppercase; }
+#affirm-text { width: 100%; resize: none; overflow: hidden; border: 0; outline: 0; padding: 2px 0; background: transparent; color: var(--ink); caret-color: var(--ink);
+  font: italic 17px/1.5 var(--body); min-height: 1.5em;
+  background-image: repeating-linear-gradient(to bottom, transparent 0, transparent calc(1.5em - 1px), var(--line) calc(1.5em - 1px), var(--line) 1.5em); background-position: 0 2px; }
+#affirm-text::placeholder { color: var(--muted); opacity: .8; }
+#affirm-text:focus { background-image: repeating-linear-gradient(to bottom, transparent 0, transparent calc(1.5em - 1px), var(--ink) calc(1.5em - 1px), var(--ink) 1.5em); }

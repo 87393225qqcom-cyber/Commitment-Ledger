@@ -27,6 +27,10 @@
 </head>
 <body>
 <div class="wrap">
+  <div id="affirm" class="affirm" hidden>
+    <label class="affirm-label" for="affirm-text"><span>Note to self</span><span id="affirm-meta"></span></label>
+    <textarea id="affirm-text" rows="1" maxlength="160" spellcheck="false" placeholder="Type a few encouraging words for today…"></textarea>
+  </div>
   <header class="top">
     <div>
       <h1>Commitment Ledger</h1>
@@ -36,7 +40,7 @@
   </header>
   <div id="install" class="install" hidden></div>
   <nav class="tabs" aria-label="Views">
-    <a href="#today" data-view="today">Today</a>
+    <a href="#today" data-view="today"><canvas class="tab-icon" width="72" height="72" aria-hidden="true"></canvas>Today</a>
     <a href="#history" data-view="history">History</a>
     <a href="#projects" data-view="projects">Projects</a>
     <a href="#settings" data-view="settings">Settings</a>
