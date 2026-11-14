@@ -1240,6 +1240,10 @@
         <button class="btn small primary" data-act="import-confirm">Replace my data</button><button class="btn quiet small" data-act="import-cancel">Cancel</button></div>`;
     h += '</section>';
 
+    h += `<section class="card"><div class="sec-head"><h2>User manual · 使用手册</h2></div>
+      <p class="muted small">A short guide in English and Chinese. 中英文简明使用指南。</p>
+      <div class="row"><a class="btn" href="manual.html">Open manual · 打开手册</a></div></section>`;
+
     h += `<section class="card"><div class="sec-head"><h2>Install on iPhone</h2>${isStandalone() ? '<span class="chip on">Installed</span>' : ''}</div>
       <ol class="small steps"><li>Open this page in <b>Safari</b>.</li><li>Tap the <b>Share</b> button.</li><li>Choose <b>Add to Home Screen</b>, then <b>Add</b>.</li><li>Open the ledger from its icon. It runs full screen and keeps your data.</li></ol>
       <p class="muted small">Data saved in Safari and in the Home Screen app are separate. Use the Home Screen app day to day, and if you started in Safari, export there and import in the app.</p></section>`;

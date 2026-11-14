@@ -1,8 +1,8 @@
 // Commitment Ledger service worker: lets the app open with no connection.
 // Bump VERSION whenever you change any file, so iPhones pick up the new version.
-const VERSION = 'ledger-v5';
+const VERSION = 'ledger-v6';
 const CORE = ['./', './index.html', './styles.css', './app.js', './manifest.webmanifest',
-  './icons/apple-touch-icon.png', './icons/icon-192.png', './icons/icon-512.png'];
+  './manual.html', './icons/apple-touch-icon.png', './icons/icon-192.png', './icons/icon-512.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(CORE)).then(() => self.skipWaiting()));
