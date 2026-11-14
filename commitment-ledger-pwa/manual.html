@@ -7,6 +7,11 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400&display=swap">
+  <!-- Chinese text: KingHwa_OldSong (京華老宋体), loaded in small pieces so only the characters shown are downloaded -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@chinese-fonts/jhlst@3.0.0/dist/%E4%BA%AC%E8%8F%AF%E8%80%81%E5%AE%8B%E4%BD%93v2_002/result.css">
   <link rel="stylesheet" href="styles.css">
   <style>
     .manual { max-width: 680px; }
@@ -15,10 +20,21 @@
     .manual ol, .manual ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
     .manual li { overflow-wrap: anywhere; }
     .lang-switch { display: flex; gap: 6px; }
-    .zh { font-family: "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei", var(--body); }
+    .zh { font-family: "Courier Prime", "American Typewriter", "Courier New", "KingHwa_OldSong", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei", var(--body); }
     body.show-en .zh, body.show-zh .en { display: none; }
     .back { color: var(--accent); font-weight: 600; text-decoration: none; }
   </style>
+<script>
+  // Use the same day/night appearance as the app.
+  (function () {
+    try {
+      var st = (JSON.parse(localStorage.getItem('commitment-ledger.v1') || '{}').settings) || {}, a = st.appearance || 'time', th = null;
+      if (a === 'light' || a === 'dark') th = a;
+      else if (a === 'time') { var d = new Date(), h = d.getHours() + d.getMinutes() / 60, f = st.dayFrom == null ? 7 : st.dayFrom, n = st.nightFrom == null ? 19 : st.nightFrom; th = h >= f && h < n ? 'light' : 'dark'; }
+      if (th) document.documentElement.setAttribute('data-theme', th);
+    } catch (e) {}
+  })();
+</script>
 </head>
 <body class="show-en">
 <div class="wrap manual">

@@ -1,6 +1,7 @@
 (() => {
   const BLOCKERS = ['Meetings', 'Distraction', 'Underestimated', 'Low energy', 'Unclear next step', 'Interruptions'];
-  const ESTS = [25, 50, 90, 120];
+  const ESTS = [15, 25, 50, 90, 120, 180];
+  const estOptions = sel => ESTS.map(e => `<option value="${e}"${e === sel ? ' selected' : ''}>Est. ${mins(e)}</option>`).join('');
   const CATS = [
     { id: 'passion', name: 'Passion-driven', blurb: 'Work you want to do. Protect time for it before it gets crowded out.' },
     { id: 'must', name: 'Must-do', blurb: 'Obligations with real consequences if they slip.' },
@@ -72,7 +73,10 @@
   const fmt = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   const parse = k => { const [y, m, d] = k.split('-').map(Number); return new Date(y, m - 1, d); };
   const addDays = (k, n) => { const d = parse(k); d.setDate(d.getDate() + n); return fmt(d); };
-  const todayKey = () => fmt(new Date());
+  // The ledger day starts at settings.dayStart (0–6 h), so work after midnight still counts for the evening before.
+  const dayStartH = () => (state.settings && Number.isFinite(state.settings.dayStart)) ? state.settings.dayStart : 0;
+  const dayKeyOf = when => fmt(new Date(new Date(when).getTime() - dayStartH() * 3600000));
+  const todayKey = () => dayKeyOf(Date.now());
   const weekStart = k => { const d = parse(k); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return fmt(d); };
   const longDate = k => parse(k).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
   const shortDate = k => parse(k).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
@@ -135,7 +139,7 @@
   // ---------- storage (this device only: localStorage) ----------
   const LOCAL = 'commitment-ledger.v1';
   const SCHEMA = 1;
-  const DEFAULT_SETTINGS = { alarmSound: 'celebration', morningBriefing: true, eveningSummary: true, eveningHour: 18, lastBriefing: null, lastEvening: null, lastBackup: null };
+  const DEFAULT_SETTINGS = { appearance: 'time', dayFrom: 7, nightFrom: 19, dayStart: 0, alarmSound: 'celebration', morningBriefing: true, eveningSummary: true, eveningHour: 18, lastBriefing: null, lastEvening: null, lastBackup: null };
   const Store = {
     backend: 'local', saveTimer: null, failed: false,
     init() {
@@ -144,6 +148,7 @@
         if (raw) this.apply(JSON.parse(raw));
       } catch (e) { state.note = 'Saved data couldn’t be read. Import a backup from Settings.'; }
       state.settings = Object.assign({}, DEFAULT_SETTINGS, state.settings || {});
+      applyTheme();
       // Ask the browser to keep this data even when space is low (best effort).
       try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch (e) {}
       state.ready = true; render(); triggers();
@@ -483,7 +488,7 @@
 
   function projectOptions(id, selected) {
     const ps = activeProjects();
-    return `<select id="${id}" aria-label="Category or project"><option value="">No category</option>${CATS.map(c => `<optgroup label="${esc(c.name)}">
+    return `<select id="${id}" aria-label="Category or project"><option value="">Category: none</option>${CATS.map(c => `<optgroup label="${esc(c.name)}">
       <option value="c:${c.id}">${esc(c.name)} (no project)</option>
       ${ps.filter(p => projCat(p) === c.id).map(p => `<option value="p:${esc(p.id)}"${p.id === selected ? ' selected' : ''}>${esc(p.name)}</option>`).join('')}</optgroup>`).join('')}</select>`;
   }
@@ -491,7 +496,7 @@
     return `<form class="add-form" data-form="${late ? 'add-late' : 'add'}">
       <input type="text" id="${late ? 'late' : 'new'}-text" placeholder="${late ? 'Something that came up…' : 'A concrete outcome, e.g. “Draft section 3 of the paper”'}" aria-label="Task" maxlength="200" autocomplete="off">
       ${projectOptions(late ? 'late-project' : 'new-project', '')}
-      <select id="${late ? 'late' : 'new'}-est" aria-label="Estimate">${ESTS.map(e => `<option value="${e}"${e === 50 ? ' selected' : ''}>${mins(e)}</option>`).join('')}</select>
+      <select id="${late ? 'late' : 'new'}-est" aria-label="Time estimate" title="How long you expect this to take">${estOptions(50)}</select>
       <button class="btn ${late ? '' : 'primary'}" type="submit">${late ? 'Add unplanned' : 'Add'}</button>
     </form>`;
   }
@@ -509,24 +514,31 @@
     if (t.late) meta.push('<span class="unplanned">unplanned</span>');
     if (t.dropped) meta.push(`<span>Dropped: ${esc(t.reason || 'no reason given')}</span>`);
     if (t.carried) meta.push('<span>carried over</span>');
+    if (t.edited) meta.push('<span>edited after lock-in</span>');
     const running = timer && timer.day === k && timer.taskId === t.id;
     let actions = '';
-    if (!d.locked) actions = `<button class="btn quiet small" data-act="remove" data-id="${t.id}" aria-label="Remove task">Remove</button>`;
+    const editBtn = `<button class="btn quiet small" data-act="edit-task" data-id="${t.id}">Edit</button>`;
+    if (!d.locked) actions = `${editBtn}<button class="btn quiet small" data-act="remove" data-id="${t.id}" aria-label="Remove task">Remove</button>`;
     else if (!d.review.closed) {
       if (t.dropped) actions = `<button class="btn quiet small" data-act="restore" data-id="${t.id}">Restore</button>`;
       else if (!t.done) actions = `${running ? `<button class="btn small primary" data-act="stop">Stop</button>` : `<button class="btn small" data-act="focus" data-id="${t.id}">Focus</button>`}
-        <button class="btn quiet small" data-act="drop" data-id="${t.id}">Drop</button>`;
+        ${editBtn}<button class="btn quiet small" data-act="drop" data-id="${t.id}">Drop</button>`;
     }
     const dropping = state.ui.dropping === t.id ? `<div class="drop-box">
         <input type="text" id="drop-reason" placeholder="Why are you dropping this?" aria-label="Reason for dropping" maxlength="160">
         <button class="btn small" data-act="confirm-drop" data-id="${t.id}">Drop it</button>
         <button class="btn quiet small" data-act="cancel-drop">Cancel</button></div>` : '';
+    const editing = state.ui.editTask === t.id ? `<div class="drop-box">
+        <input type="text" id="et-text" value="${esc(t.text)}" aria-label="Task" maxlength="200">
+        <select id="et-est" aria-label="Time estimate">${estOptions(t.est || 50)}${ESTS.includes(t.est) ? '' : `<option value="${t.est}" selected>Est. ${mins(t.est || 0)}</option>`}</select>
+        <button class="btn small primary" data-act="save-task" data-id="${t.id}">Save</button>
+        <button class="btn quiet small" data-act="cancel-edit-task">Cancel</button></div>` : '';
     const checkable = d.locked && !t.dropped && !d.review.closed;
     return `<li class="task ${t.done ? 'is-done' : ''} ${t.dropped ? 'is-dropped' : ''}">
       ${d.locked ? `<button class="check" ${checkable ? `data-act="toggle" data-id="${t.id}"` : 'disabled'} aria-pressed="${!!t.done}" aria-label="${t.done ? 'Mark not done' : 'Mark done'}">${CHECK}</button>` : '<span class="step" aria-hidden="true">•</span>'}
       <div class="t-body"><div class="t-text">${esc(t.text)}</div><div class="t-meta">${meta.join('')}</div></div>
       <div class="t-actions">${actions}</div>
-      ${dropping}
+      ${dropping}${editing}
     </li>`;
   }
 
@@ -576,6 +588,7 @@
     if (d.rest) {
       h += `<p class="muted">Today is marked as a rest day. It won’t count for or against your streak.</p>
         <div class="row"><button class="btn" data-act="unrest">Undo rest day</button></div></section>`;
+      h += `<section class="card">${logPanel(k, d)}</section>`;
       return h;
     }
     if (!d.locked) {
@@ -599,6 +612,7 @@
         <button class="btn primary" data-act="lock" ${d.tasks.length ? '' : 'disabled'}>Lock in ${d.tasks.length || ''} commitment${d.tasks.length === 1 ? '' : 's'}</button></div>
         <p class="muted" style="font-size:13px">After you lock in, tasks can be finished or dropped with a reason. They can’t be quietly deleted.</p>`;
       h += '</section>';
+      h += `<section class="card">${logPanel(k, d)}</section>`;
       return h;
     }
 
@@ -675,9 +689,9 @@
       const oid = new Set(ops.map(p => p.id));
       const feed = [];
       logs.filter(l => oid.has(l.project) && l.date >= from14 && l.note).forEach(l => feed.push({ at: l.at || l.date, date: l.date, text: l.note, p: l.project }));
-      backlog().filter(b => oid.has(b.project) && b.done && b.doneAt && fmt(new Date(b.doneAt)) >= from14).forEach(b => feed.push({ at: b.doneAt, date: fmt(new Date(b.doneAt)), text: `Milestone: ${b.text}`, p: b.project }));
+      backlog().filter(b => oid.has(b.project) && b.done && b.doneAt && dayKeyOf(b.doneAt) >= from14).forEach(b => feed.push({ at: b.doneAt, date: dayKeyOf(b.doneAt), text: `Milestone: ${b.text}`, p: b.project }));
       feed.sort((a, b) => a.at < b.at ? 1 : -1);
-      const msDone = backlog().filter(b => oid.has(b.project) && b.done && b.doneAt && fmt(new Date(b.doneAt)) >= ws).length;
+      const msDone = backlog().filter(b => oid.has(b.project) && b.done && b.doneAt && dayKeyOf(b.doneAt) >= ws).length;
       const plist = (items, val) => items.length ? `<ul class="plist">${items.map(p => `<li class="cat-${projCat(p)}"><span><span class="cat-dot"></span>${esc(p.name)}</span><span class="num">${val(p)}</span></li>`).join('')}</ul>` : '';
       h += `<section class="card"><div class="sec-head"><h2>Progress</h2><span class="muted">This week, by how you track it</span></div><div class="tri">
         <div><span class="label">Word count</span><span class="big">${nf(wordsWeek)}</span><span class="delta">words this week · last week ${nf(wordsLast)}</span>
@@ -807,9 +821,10 @@
     const onToday = new Set((getDay(todayKey()).tasks || []).map(t => t.backlogId).filter(Boolean));
     return `<ul class="ptasks">${items.map(b => `<li class="ptask ${b.done ? 'is-done' : ''}">
         <button class="check" data-act="btoggle" data-id="${b.id}" aria-pressed="${!!b.done}" aria-label="${b.done ? 'Mark not done' : 'Mark done'}">${CHECK}</button>
-        <span class="t-text">${esc(b.text)}${onToday.has(b.id) && !b.done ? ' <span class="chip on">on today</span>' : ''}</span>
+        ${state.ui.editB === b.id ? `<span class="mini-form"><input type="text" id="eb-text" value="${esc(b.text)}" aria-label="Task" maxlength="200"><button class="btn small primary" data-act="save-btask" data-id="${b.id}">Save</button><button class="btn quiet small" data-act="cancel-edit-b">Cancel</button></span>`
+          : `<span class="t-text">${esc(b.text)}${onToday.has(b.id) && !b.done ? ' <span class="chip on">on today</span>' : ''}</span>`}
         <span class="t-actions">${!b.done && !onToday.has(b.id) ? `<button class="btn small" data-act="to-today" data-id="${b.id}">To today</button>` : ''}
-          <button class="btn quiet small" data-act="bremove" data-id="${b.id}" aria-label="Delete task">Delete</button></span>
+          ${state.ui.editB === b.id ? '' : `<button class="btn quiet small" data-act="edit-b" data-id="${b.id}">Edit</button>`}<button class="btn quiet small" data-act="bremove" data-id="${b.id}" aria-label="Delete task">Delete</button></span>
       </li>`).join('')}</ul>`;
   }
   function sortTasks(items) { return [...items].sort((a, b) => (a.done - b.done) || ((a.created || '') < (b.created || '') ? -1 : 1)); }
@@ -850,7 +865,7 @@
               ? `<button class="btn small" data-act="del-project" data-id="${p.id}">Yes, remove it and its open list (past days are kept)</button> <button class="btn quiet small" data-act="cancel-del">Keep</button>`
               : `<button class="btn quiet small" data-act="edit-proj" data-id="${p.id}">Edit</button><button class="btn quiet small" data-act="ask-del" data-id="${p.id}">Remove</button>`}</span>
           </div>
-          ${editing ? `<div class="pedit">${catSelect('edit-cat', projCat(p))}${modeFields('edit', p.deadline)}${metricFields('edit', p)}
+          ${editing ? `<div class="pedit"><input type="text" id="edit-name" value="${esc(p.name)}" aria-label="Project name" maxlength="80" style="flex:1 1 200px">${catSelect('edit-cat', projCat(p))}${modeFields('edit', p.deadline)}${metricFields('edit', p)}
               <input type="number" id="edit-start" min="0" step="1" aria-label="Words already written" placeholder="Words already written" value="${p.startWords ? esc(p.startWords) : ''}" ${projMetric(p) === 'words' ? '' : 'hidden'} class="target-input">
               <button class="btn small primary" data-act="save-proj" data-id="${p.id}">Save</button><button class="btn quiet small" data-act="cancel-edit">Cancel</button></div>` : ''}
           ${progBlock(p)}
@@ -873,10 +888,18 @@
   }
 
   // ---------- events ----------
-  function toast(msg) {
+  // A short message; with `action` it also shows a button (e.g. Undo) and stays up longer.
+  function toast(msg, action) {
     const t = document.getElementById('toast');
-    t.textContent = msg; t.hidden = false;
-    clearTimeout(toast.t); toast.t = setTimeout(() => t.hidden = true, 2600);
+    t.textContent = '';
+    const span = document.createElement('span'); span.textContent = msg; t.appendChild(span);
+    if (action) {
+      const b = document.createElement('button'); b.className = 'toast-btn'; b.type = 'button'; b.textContent = action.label;
+      b.addEventListener('click', ev => { ev.stopPropagation(); t.hidden = true; action.fn(); });
+      t.appendChild(b);
+    }
+    t.hidden = false;
+    clearTimeout(toast.t); toast.t = setTimeout(() => t.hidden = true, action ? 6000 : 2600);
   }
 
   document.addEventListener('submit', e => {
@@ -1022,7 +1045,8 @@
         const target = metric === 'other' ? null : (Number(document.getElementById('edit-target').value) || null);
         const startWords = Number(document.getElementById('edit-start')?.value) || 0;
         state.ui.editProj = null;
-        mutateProfile(p => { const x = p.projects.find(q => q.id === id); if (x) { x.category = category; x.deadline = deadline; x.metric = metric; x.target = target; x.startWords = startWords; } });
+        const newName = (document.getElementById('edit-name')?.value || '').trim();
+        mutateProfile(p => { const x = p.projects.find(q => q.id === id); if (x) { if (newName) x.name = newName; x.category = category; x.deadline = deadline; x.metric = metric; x.target = target; x.startWords = startWords; } });
         break;
       }
       case 'focus': startTimer(k, id); break;
@@ -1068,7 +1092,7 @@
     const d = getDay(k), s = stats(d), logs = d.logs || [];
     const words = logs.filter(l => l.kind === 'words').reduce((a, l) => a + (l.value || 0), 0);
     const logged = logs.filter(l => l.kind === 'time').reduce((a, l) => a + (l.value || 0), 0);
-    const milestones = backlog().filter(b => b.done && b.doneAt && fmt(new Date(b.doneAt)) === k && b.project && projectOf(b.project) && projMetric(projectOf(b.project)) === "other");
+    const milestones = backlog().filter(b => b.done && b.doneAt && dayKeyOf(b.doneAt) === k && b.project && projectOf(b.project) && projMetric(projectOf(b.project)) === "other");
     const notes = logs.filter(l => l.note);
     return { d, s, words, time: s.minutes + logged, milestones, notes };
   }
@@ -1153,11 +1177,34 @@
   document.getElementById('modal').addEventListener('click', e => { if (e.target.id === 'modal') closeModal(); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 
+  // ---------- appearance: light by day, dark by night ----------
+  // 'time' = light between dayFrom and nightFrom, dark otherwise; 'system' = follow the phone; or always light / dark.
+  function themeNow() {
+    const st = state.settings || {}, a = st.appearance || 'time';
+    if (a === 'light' || a === 'dark') return a;
+    if (a === 'system') return null;
+    const now = new Date(), h = now.getHours() + now.getMinutes() / 60;
+    const day = Number.isFinite(st.dayFrom) ? st.dayFrom : 7, night = Number.isFinite(st.nightFrom) ? st.nightFrom : 19;
+    return h >= day && h < night ? 'light' : 'dark';
+  }
+  function applyTheme() {
+    const t = themeNow(), root = document.documentElement;
+    if (t) root.setAttribute('data-theme', t); else root.removeAttribute('data-theme');
+    document.querySelectorAll('meta[name="theme-color"]').forEach(m => {
+      const darkMeta = (m.getAttribute('media') || '').includes('dark');
+      m.setAttribute('content', (t ? t === 'dark' : darkMeta) ? '#111110' : '#ebeae6');
+    });
+  }
+  setInterval(applyTheme, 60000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) applyTheme(); });
+
   // ---------- in-app triggers (iOS can't schedule web notifications, so the app checks on open) ----------
   function setSetting(patch) { state.settings = Object.assign({}, state.settings, patch); Store.save(); }
   function triggers() {
     if (!state.ready || document.hidden || !document.getElementById('modal').hidden || focusOpen) return;
-    const k = todayKey(), d = getDay(k), hour = new Date().getHours(), st = state.settings;
+    const k = todayKey(), d = getDay(k), st = state.settings;
+    // Hours since the ledger day began, so 1 AM with a 4 AM start counts as late evening (hour 21+).
+    const hour = (new Date().getHours() - dayStartH() + 24) % 24 + dayStartH();
     if (d.rest || d.review.closed) return;
     if (st.eveningSummary && hour >= st.eveningHour && st.lastEvening !== k) {
       setSetting({ lastEvening: k, lastBriefing: k });
@@ -1208,6 +1255,10 @@
     if (t.id === 'set-morning') { setSetting({ morningBriefing: t.checked }); render(); }
     if (t.id === 'set-evening') { setSetting({ eveningSummary: t.checked }); render(); }
     if (t.id === 'set-hour') { setSetting({ eveningHour: Number(t.value) }); render(); }
+    if (t.id === 'set-appearance') { setSetting({ appearance: t.value }); applyTheme(); render(); }
+    if (t.id === 'set-dayfrom') { setSetting({ dayFrom: Number(t.value) }); applyTheme(); render(); }
+    if (t.id === 'set-nightfrom') { setSetting({ nightFrom: Number(t.value) }); applyTheme(); render(); }
+    if (t.id === 'set-daystart') { setSetting({ dayStart: Number(t.value) }); lastKey = todayKey(); render(); toast(Number(t.value) ? `Your day now changes at ${t.value}:00.` : 'Your day now changes at midnight.'); }
     if (t.id === 'set-sound') { setSetting({ alarmSound: t.value }); unlockAudio(); playChime(); render(); }
   });
 
@@ -1216,10 +1267,24 @@
     const st = state.settings, nDays = Object.keys(state.days).length, nProj = activeProjects().length, nTasks = backlog().length;
     const lb = st.lastBackup ? new Date(st.lastBackup) : null;
     const pi = state.ui.pendingImport;
-    let h = `<section class="card"><div class="sec-head"><h2>Daily check-ins</h2></div>
+    const ap = st.appearance || 'time';
+    const hourOpts = (list, sel) => list.map(x => `<option value="${x}"${x === sel ? ' selected' : ''}>${x}:00</option>`).join('');
+    let h = `<section class="card"><div class="sec-head"><h2>Appearance</h2><span class="chip">${document.documentElement.getAttribute('data-theme') === 'dark' || (!document.documentElement.getAttribute('data-theme') && matchMedia('(prefers-color-scheme: dark)').matches) ? 'Night: light text on dark' : 'Day: dark text on light'}</span></div>
+      <div class="row"><select id="set-appearance" aria-label="Appearance">
+        <option value="time"${ap === 'time' ? ' selected' : ''}>Day and night by time</option>
+        <option value="system"${ap === 'system' ? ' selected' : ''}>Follow phone (Light/Dark Mode)</option>
+        <option value="light"${ap === 'light' ? ' selected' : ''}>Always day (light)</option>
+        <option value="dark"${ap === 'dark' ? ' selected' : ''}>Always night (dark)</option></select></div>
+      ${ap === 'time' ? `<div class="row"><label for="set-dayfrom" class="small">Day from</label><select id="set-dayfrom">${hourOpts([5, 6, 7, 8, 9, 10], st.dayFrom ?? 7)}</select>
+        <label for="set-nightfrom" class="small">Night from</label><select id="set-nightfrom">${hourOpts([16, 17, 18, 19, 20, 21, 22], st.nightFrom ?? 19)}</select></div>` : ''}
+      <p class="muted small">${ap === 'system' ? 'Matches your phone. On iPhone, Settings → Display & Brightness → Automatic switches at sunset.' : ap === 'time' ? 'The whole app, focus timer included, switches automatically at these times.' : 'Stays this way all day.'}</p></section>`;
+    h += `<section class="card"><div class="sec-head"><h2>Daily check-ins</h2></div>
       <p class="muted small">iPhone web apps can’t send scheduled notifications, so the ledger checks in when you open it.</p>
       <label class="toggle"><input type="checkbox" id="set-morning" ${st.morningBriefing ? 'checked' : ''}><span><b>Morning briefing</b><br><span class="muted small">On your first open of the day: yesterday’s result, deadlines, stale projects.</span></span></label>
       <label class="toggle"><input type="checkbox" id="set-evening" ${st.eveningSummary ? 'checked' : ''}><span><b>Evening summary</b><br><span class="muted small">When you open the app in the evening and haven’t closed the day.</span></span></label>
+      <div class="row"><label for="set-daystart" class="small">New day starts at</label>
+        <select id="set-daystart">${[0, 1, 2, 3, 4, 5, 6].map(x => `<option value="${x}"${x === (st.dayStart || 0) ? " selected" : ""}>${x === 0 ? "Midnight (0:00)" : x + ":00"}</option>`).join("")}</select>
+        <span class="muted small">Work done before this hour counts for the previous day.</span></div>
       <div class="row"><label for="set-hour" class="small">Evening starts at</label>
         <select id="set-hour">${[15, 16, 17, 18, 19, 20, 21, 22].map(x => `<option value="${x}"${x === st.eveningHour ? ' selected' : ''}>${x}:00</option>`).join('')}</select></div>
       <div class="row"><button class="btn small" data-act="show-briefing">Preview briefing</button><button class="btn small" data-act="show-evening">Preview evening summary</button></div>
@@ -1295,11 +1360,64 @@
     window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
   }
 
+  // ---------- editing, undo ----------
+  const UNDOABLE = { toggle: 1, btoggle: 1, 'confirm-drop': 1, remove: 1, bremove: 1, 'del-project': 1, 'del-log': 1 };
+  const snapshot = () => JSON.stringify({ days: state.days, profile: state.profile });
+  // Runs before the action handlers (capture phase): remember the data, then offer Undo if it changed.
+  document.addEventListener('click', e => {
+    const b = e.target.closest('[data-act]'); if (!b || !UNDOABLE[b.dataset.act]) return;
+    const act = b.dataset.act, id = b.dataset.id, snap = snapshot();
+    setTimeout(() => {
+      if (snapshot() === snap) return;
+      let label = 'Change saved.';
+      if (act === 'toggle') { const t = getDay(todayKey()).tasks.find(x => x.id === id); label = t && t.done ? 'Marked done.' : 'Marked not done.'; }
+      else if (act === 'btoggle') { const x = backlog().find(y => y.id === id); label = x && x.done ? 'Marked done.' : 'Marked not done.'; }
+      else label = { 'confirm-drop': 'Task dropped.', remove: 'Task removed.', bremove: 'Task deleted.', 'del-project': 'Project removed.', 'del-log': 'Entry removed.' }[act];
+      toast(label, { label: 'Undo', fn: () => { const v = JSON.parse(snap); state.days = v.days; state.profile = v.profile; Store.save(); render(); toast('Undone.'); } });
+    }, 0);
+  }, true);
+
+  document.addEventListener('click', e => {
+    const b = e.target.closest('[data-act]'); if (!b) return;
+    const k = todayKey(), id = b.dataset.id;
+    const focusSoon = elId => setTimeout(() => { const el = document.getElementById(elId); if (el) { el.focus(); try { el.setSelectionRange(el.value.length, el.value.length); } catch (err) {} } }, 0);
+    switch (b.dataset.act) {
+      case 'edit-task': state.ui.editTask = id; state.ui.dropping = null; render(); focusSoon('et-text'); break;
+      case 'cancel-edit-task': state.ui.editTask = null; render(); break;
+      case 'save-task': {
+        const text = (document.getElementById('et-text')?.value || '').trim(), est = Number(document.getElementById('et-est')?.value) || 50;
+        if (!text) { toast('The task needs a name.'); break; }
+        const t0 = getDay(k).tasks.find(x => x.id === id), changed = !!t0 && t0.text !== text;
+        state.ui.editTask = null;
+        mutateDay(k, d => { const t = d.tasks.find(x => x.id === id); if (t) { if (d.locked && changed) t.edited = true; t.text = text; t.est = est; } });
+        if (t0 && t0.backlogId && changed) mutateProfile(p => { const x = p.backlog.find(y => y.id === t0.backlogId); if (x) x.text = text; });
+        toast('Saved.'); break;
+      }
+      case 'edit-b': state.ui.editB = id; render(); focusSoon('eb-text'); break;
+      case 'cancel-edit-b': state.ui.editB = null; render(); break;
+      case 'save-btask': {
+        const text = (document.getElementById('eb-text')?.value || '').trim();
+        if (!text) { toast('The task needs a name.'); break; }
+        state.ui.editB = null;
+        mutateProfile(p => { const x = p.backlog.find(y => y.id === id); if (x) x.text = text; });
+        const d = getDay(k), copy = d.tasks.find(t => t.backlogId === id);
+        if (copy && !d.locked) mutateDay(k, dd => { const t = dd.tasks.find(x => x.id === copy.id); if (t) t.text = text; });
+        toast('Saved.'); break;
+      }
+    }
+  });
+  // Enter saves inline editors.
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Enter' || e.isComposing) return;
+    const act = { 'et-text': 'save-task', 'eb-text': 'save-btask', 'drop-reason': 'confirm-drop' }[e.target.id]; if (!act) return;
+    e.preventDefault(); document.querySelector(`[data-act="${act}"]`)?.click();
+  });
+
   // ---------- routing ----------
   function route() {
     const h = location.hash.replace('#', '');
     state.view = ['today', 'history', 'projects', 'settings'].includes(h) ? h : 'today';
-    state.ui.dropping = null; state.ui.confirmDel = null; state.ui.editProj = null;
+    state.ui.dropping = null; state.ui.confirmDel = null; state.ui.editProj = null; state.ui.editTask = null; state.ui.editB = null;
     render();
   }
   window.addEventListener('hashchange', route);

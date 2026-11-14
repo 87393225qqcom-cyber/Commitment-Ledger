@@ -1,6 +1,6 @@
 // Commitment Ledger service worker: lets the app open with no connection.
 // Bump VERSION whenever you change any file, so iPhones pick up the new version.
-const VERSION = 'ledger-v6';
+const VERSION = 'ledger-v10';
 const CORE = ['./', './index.html', './styles.css', './app.js', './manifest.webmanifest',
   './manual.html', './icons/apple-touch-icon.png', './icons/icon-192.png', './icons/icon-512.png'];
 
@@ -20,8 +20,8 @@ self.addEventListener('fetch', e => {
       .catch(() => caches.match(req, { ignoreSearch: true }).then(r => r || caches.match('./index.html'))));
     return;
   }
-  // Google Fonts: cache first.
-  if (url.hostname.endsWith('googleapis.com') || url.hostname.endsWith('gstatic.com')) {
+  // Fonts (Google Fonts for Latin, jsDelivr for KingHwa Chinese): cache first, so they work offline.
+  if (url.hostname.endsWith('googleapis.com') || url.hostname.endsWith('gstatic.com') || url.hostname === 'cdn.jsdelivr.net') {
     e.respondWith(caches.match(req).then(hit => hit || fetch(req).then(res => { const copy = res.clone(); caches.open(VERSION).then(c => c.put(req, copy)); return res; })));
   }
 });

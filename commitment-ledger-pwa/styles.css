@@ -6,37 +6,40 @@ body { margin: 0; min-height: 100vh; -webkit-tap-highlight-color: transparent; }
 img { max-width: 100%; }
 button, a, label, select { touch-action: manipulation; }
 body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); background: var(--bg); z-index: 10; }
-/* Layout: one narrow ledger column; each day is a page with three acts — commit, work, close. */
+/* Layout: one narrow ledger column, printed on paper. Each day is a page with three acts: commit, work, close.
+   Look: off-white paper, near-black ink, Helvetica, square corners, thick ink rules instead of boxes.
+   Colour is kept for meaning only: category dots and the orange "needs attention" signal. */
 :root {
-  --bg: #eef2f3;
-  --surface: #ffffff;
-  --ink: #14212a;
-  --muted: #5a6b76;
-  --line: #d9e1e5;
-  --accent: #0d6b63;
-  --accent-ink: #ffffff;
-  --accent-soft: #d5ebe8;
-  --warn: #a8530c;
-  --warn-soft: #f7e4d3;
-  --empty: #e3e9ec;
+  --bg: #ebeae6;
+  --surface: #f4f3ef;
+  --ink: #121212;
+  --muted: #64635f;
+  --line: #cfcec8;
+  --accent: #121212;
+  --accent-ink: #f4f3ef;
+  --accent-soft: #dad9d3;
+  --warn: #b04a0c;
+  --warn-soft: #f1dccb;
+  --empty: #dcdbd5;
   --passion: #b2386c;
-  --must: #a8530c;
-  --baseline: #4c6878;
-  --display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
-  --body: "IBM Plex Sans", "Helvetica Neue", system-ui, sans-serif;
-  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
-  --r: 10px;
+  --must: #0d6b63;
+  --baseline: #3f5f70;
+  --display: "Courier Prime", "American Typewriter", "Courier New", Courier, "KingHwa_OldSong", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", monospace;
+  --body: "Courier Prime", "American Typewriter", "Courier New", Courier, "KingHwa_OldSong", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", monospace;
+  --mono: "Courier Prime", "American Typewriter", "Courier New", Courier, "KingHwa_OldSong", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", monospace;
+  --r: 0px;
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.5 0 0 0 0 0.5 0 0 0 0 0.5 0 0 0 .07 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0e1417; --surface: #151d21; --ink: #e2eaed; --muted: #8e9fa9; --line: #25323a;
-    --accent: #4dbdb0; --accent-ink: #062623; --accent-soft: #15332f; --warn: #eb9a5f; --warn-soft: #3a2616; --empty: #1d272c; --passion: #e67ba6; --must: #eb9a5f; --baseline: #93b0bf;
+    --bg: #111110; --surface: #1a1a18; --ink: #e9e8e3; --muted: #9a9993; --line: #33332f;
+    --accent: #e9e8e3; --accent-ink: #111110; --accent-soft: #2a2a27; --warn: #ec9a5e; --warn-soft: #3a2616; --empty: #262623; --passion: #e67ba6; --must: #4dbdb0; --baseline: #93b0bf;
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #0e1417; --surface: #151d21; --ink: #e2eaed; --muted: #8e9fa9; --line: #25323a;
-  --accent: #4dbdb0; --accent-ink: #062623; --accent-soft: #15332f; --warn: #eb9a5f; --warn-soft: #3a2616; --empty: #1d272c; --passion: #e67ba6; --must: #eb9a5f; --baseline: #93b0bf;
+  --bg: #111110; --surface: #1a1a18; --ink: #e9e8e3; --muted: #9a9993; --line: #33332f;
+  --accent: #e9e8e3; --accent-ink: #111110; --accent-soft: #2a2a27; --warn: #ec9a5e; --warn-soft: #3a2616; --empty: #262623; --passion: #e67ba6; --must: #4dbdb0; --baseline: #93b0bf;
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -249,13 +252,14 @@ body.modal-open { overflow: hidden; }
 /* A giant cropped ring of barcode-like ticks that wears away clockwise; type set along the curve. */
 .focus {
   --paper: #ebeae6; --fink: #121212; --fmute: #6b6b68;
-  --fgrot: "Helvetica Neue", Helvetica, Arial, system-ui, sans-serif;
+  --fgrot: "Courier Prime", "American Typewriter", "Courier New", Courier, "KingHwa_OldSong", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", monospace;
   position: fixed; inset: 0; z-index: 40; overflow: hidden; color: var(--fink);
   background-color: var(--paper);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.5 0 0 0 0 0.5 0 0 0 0 0.5 0 0 0 .07 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   font-family: var(--fgrot);
 }
-@media (prefers-color-scheme: dark) { .focus { --paper: #111110; --fink: #e9e8e3; --fmute: #8d8c87; } }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .focus { --paper: #111110; --fink: #e9e8e3; --fmute: #8d8c87; } }
+:root[data-theme="dark"] .focus { --paper: #111110; --fink: #e9e8e3; --fmute: #8d8c87; }
 .dial { position: absolute; left: 50%; top: 46%; width: min(150vw, 92vh, 1000px); height: min(150vw, 92vh, 1000px); transform: translate(-50%, -50%); pointer-events: none; }
 .dial-svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 /* Counter-rotating rings: each SVG layer spins as a whole, which phones can do on the GPU. */
@@ -284,7 +288,7 @@ body.modal-open { overflow: hidden; }
 .f-title { max-width: min(78%, 420px); display: flex; flex-direction: column; gap: 4px; }
 .f-title h2 { font: 700 clamp(20px, 5.4vw, 28px)/1.1 var(--fgrot); letter-spacing: -0.03em; color: var(--fink); overflow-wrap: anywhere; }
 .f-center { position: absolute; left: 50%; top: 46%; transform: translate(-50%, -50%); text-align: center; pointer-events: none; display: flex; flex-direction: column; gap: 2px; }
-#focus-time { font: 700 clamp(64px, 21vw, 132px)/0.9 var(--fgrot); letter-spacing: -0.06em; font-variant-numeric: tabular-nums; color: var(--fink); }
+#focus-time { font: 700 clamp(52px, 17vw, 120px)/0.95 var(--fgrot); letter-spacing: -0.03em; font-variant-numeric: tabular-nums; color: var(--fink); }
 .f-bottom { margin-top: auto; display: flex; flex-direction: column; gap: 14px; }
 .f-targets { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .f-targets .f-small { margin-right: 6px; }
@@ -302,3 +306,96 @@ body.modal-open { overflow: hidden; }
 @media (min-width: 760px) and (min-height: 600px) { .f-bottom { max-width: 460px; } }
 @media (prefers-reduced-motion: reduce) { .tk { transition: none; } .focus.over #dial-dot, .ring-cw, .ring-ccw { animation: none; } }
 #toast { z-index: 50; }
+#toast { display: flex; align-items: center; gap: 14px; }
+.toast-btn { background: none; border: 0; color: inherit; font: inherit; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; padding: 4px 2px; }
+
+
+/* ==== Paper & ink redesign (overrides the earlier card look) ==== */
+body { background-color: var(--bg); background-image: var(--grain); font-size: 15px; letter-spacing: -0.005em; }
+h1, h2, h3 { font-weight: 700; letter-spacing: -0.03em; }
+h1 { font-size: clamp(32px, 8vw, 48px); letter-spacing: -0.045em; line-height: .95; }
+h2 { font-size: 20px; }
+.num, .mono { font-family: var(--body); font-variant-numeric: tabular-nums; }
+.label { letter-spacing: 0.02em; text-transform: none; font-weight: 700; font-size: 12px; }
+
+/* Sections are separated by a thick ink rule, not boxed. */
+.card { background: transparent; border: 0; border-top: 2px solid var(--ink); border-radius: 0; padding: 14px 0 6px; }
+.cat-card { border-top: 4px solid var(--cat); }
+.cat-card h2 { color: var(--ink); }
+.cat-card h2::before { content: ""; display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: var(--cat); margin-right: 8px; vertical-align: 1px; }
+.step { color: var(--ink); font-family: var(--body); font-weight: 700; font-size: 20px; margin-right: 10px; }
+
+/* Header */
+header.top { align-items: flex-end; padding-bottom: 4px; }
+.pill { background: transparent; border: 0; border-radius: 0; padding: 0; flex-direction: column; gap: 0; align-items: flex-start; }
+.pill b { font-family: var(--body); font-weight: 700; font-size: 30px; letter-spacing: -0.04em; line-height: 1; }
+.pill span { font-weight: 700; color: var(--muted); }
+.pills { gap: 22px; }
+nav.tabs { border-bottom: 0; gap: 18px; }
+nav.tabs a { padding: 6px 0; font-size: 15px; color: var(--muted); border-bottom: 3px solid transparent; margin-bottom: 0; }
+nav.tabs a[aria-current="page"] { color: var(--ink); border-color: var(--ink); }
+
+/* Controls: square, ink outlines, solid ink for the main action. */
+.btn { border-radius: 0; border: 2px solid var(--ink); background: transparent; color: var(--ink); font-weight: 700; letter-spacing: -0.01em; }
+.btn:hover { border-color: var(--ink); background: var(--accent-soft); }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn.primary:hover { filter: none; opacity: .88; background: var(--ink); }
+.btn.quiet { border-color: transparent; background: transparent; color: var(--muted); padding-inline: 6px; }
+.btn.quiet:hover { color: var(--ink); background: transparent; text-decoration: underline; text-underline-offset: 3px; }
+input[type=text], input[type=date], input[type=number], select, textarea { border-radius: 0; background: var(--surface); border: 1.5px solid var(--line); }
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--ink); outline-offset: -1px; }
+.chip { border-radius: 0; background: transparent; border: 1.5px solid var(--line); color: var(--muted); font-weight: 700; }
+.chip.on { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+.chip.warn { background: transparent; border-color: var(--warn); color: var(--warn); }
+.choice { border-radius: 0; border: 1.5px solid var(--ink); background: transparent; font-weight: 700; }
+.choice[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.check { border-radius: 0; border-color: var(--ink); }
+.is-done .check { background: var(--ink); border-color: var(--ink); }
+.is-done .t-text { text-decoration-color: var(--ink); }
+.toggle input { accent-color: var(--ink); }
+
+/* Lists and panels */
+.task { border-top: 1px solid var(--line); }
+.tag { font-family: var(--body); font-weight: 700; color: var(--ink); }
+.carry, .picker { border: 1.5px dashed var(--ink); border-radius: 0; }
+.prog, .pedit { background: var(--surface); border-radius: 0; }
+.meter { height: 6px; background: var(--empty); border-radius: 0; }
+.meter span { background: var(--ink); border-radius: 0; }
+.prog .meter span { background: var(--cat, var(--ink)); }
+.metric-chip { border-radius: 0; border-color: var(--ink); color: var(--ink); font-family: var(--body); font-weight: 700; }
+.install { background: transparent; border: 2px solid var(--ink); border-radius: 0; }
+
+/* Numbers set large, like the timer */
+.stat b, .tri .big { font-family: var(--body); font-weight: 700; letter-spacing: -0.04em; font-size: 34px; line-height: 1; }
+.timer .clock { font-family: var(--body); font-weight: 700; letter-spacing: -0.05em; font-size: 44px; }
+.timer.running .clock { color: var(--ink); }
+.proj .due { font-family: var(--body); font-weight: 700; }
+
+/* History: ink-tone heatmap and bars */
+.cell { border-radius: 0; }
+.cell.l0 { background: color-mix(in srgb, var(--warn) 70%, var(--empty)); }
+.cell.l1 { background: color-mix(in srgb, var(--ink) 22%, var(--empty)); }
+.cell.l2 { background: color-mix(in srgb, var(--ink) 45%, var(--empty)); }
+.cell.l3 { background: color-mix(in srgb, var(--ink) 70%, var(--empty)); }
+.cell.l4 { background: var(--ink); }
+.cell.today { outline-color: var(--warn); }
+.legend i { border-radius: 0; }
+.bar .track, .bar .track span { border-radius: 0; }
+.bar .track span { background: var(--ink); }
+.cols span { background: var(--ink); border-radius: 0; }
+
+/* Pop-ups and messages */
+.modal { background: color-mix(in srgb, var(--ink) 35%, transparent); }
+.modal-card { background: var(--bg); background-image: var(--grain); border: 2px solid var(--ink); border-radius: 0; }
+.modal-card h2 { font-size: 28px; letter-spacing: -0.04em; }
+#toast { background: var(--ink); color: var(--bg); border-radius: 0; font-weight: 700; }
+
+
+/* ==== Typewriter type (Courier Prime; falls back to American Typewriter / Courier) ==== */
+body { font-size: 15.5px; line-height: 1.5; letter-spacing: 0; }
+h1 { letter-spacing: -0.03em; line-height: 1; }
+h1, h2, h3, .modal-card h2, .f-title h2 { letter-spacing: -0.01em; }
+.pill b, .stat b, .tri .big, .timer .clock { letter-spacing: -0.02em; }
+.btn, .f-btn, .f-chip, .f-link, .choice, .chip, .label, .f-small, .dial-text { letter-spacing: 0; }
+.dial-text { font-size: 22px; }
+input, select, textarea, button { font-family: var(--body); }
