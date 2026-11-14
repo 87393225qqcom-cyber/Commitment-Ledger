@@ -1,6 +1,6 @@
 // Commitment Ledger service worker: lets the app open with no connection.
 // Bump VERSION whenever you change any file, so iPhones pick up the new version.
-const VERSION = 'ledger-v1';
+const VERSION = 'ledger-v2';
 const CORE = ['./', './index.html', './styles.css', './app.js', './manifest.webmanifest',
   './icons/apple-touch-icon.png', './icons/icon-192.png', './icons/icon-512.png'];
 

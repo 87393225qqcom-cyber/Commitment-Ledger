@@ -189,26 +189,165 @@
     fn(p); state.profile = p; Store.save('profile', p); render();
   }
 
-  // ---------- focus timer (per-viewer, browser only) ----------
+  // ---------- focus timer (full-screen view, countdown to a target, wake lock, chime) ----------
   const TKEY = 'commitment-ledger.timer';
+  const TARGETS = [15, 25, 50, 90];
   let timer = null;
   try { timer = JSON.parse(localStorage.getItem(TKEY) || 'null'); } catch (e) {}
+  if (timer && !timer.target) timer.target = 25;
   const saveTimer = () => { try { timer ? localStorage.setItem(TKEY, JSON.stringify(timer)) : localStorage.removeItem(TKEY); } catch (e) {} };
-  function startTimer(day, taskId) { if (timer) stopTimer(); timer = { day, taskId, start: Date.now() }; saveTimer(); render(); }
+  let focusOpen = false, wakeLock = null, audioCtx = null;
+  const baseTitle = document.title;
+  const timerTask = () => timer ? getDay(timer.day).tasks.find(x => x.id === timer.taskId) : null;
+
+  function startTimer(day, taskId) {
+    if (timer) stopTimer();
+    const t = getDay(day).tasks.find(x => x.id === taskId);
+    const left = (t && t.est ? t.est : 50) - (t && t.minutes || 0);
+    // Default target: what's left of the task's estimate, or a 25-minute block once it's used up.
+    timer = { day, taskId, start: Date.now(), target: left >= 5 ? left : 25, alerted: false };
+    saveTimer(); unlockAudio(); render(); openFocus();
+  }
   function stopTimer() {
     if (!timer) return;
     const m = Math.round((Date.now() - timer.start) / 60000);
     const t = timer; timer = null; saveTimer();
+    closeFocus();
+    document.title = baseTitle;
     if (m >= 1) {
       mutateDay(t.day, d => { const task = d.tasks.find(x => x.id === t.taskId); if (task) task.minutes = (task.minutes || 0) + m; });
       toast(`Logged ${mins(m)} of focus.`);
     } else { toast('Under a minute, so nothing was logged.'); render(); }
   }
+
+  // Full-screen view
+  function openFocus() {
+    if (!timer) return;
+    focusOpen = true;
+    const el = document.getElementById('focus');
+    renderFocus(); el.hidden = false;
+    document.body.classList.add('modal-open');
+    requestWakeLock();
+    try { if (el.requestFullscreen && !document.fullscreenElement && !isStandalone()) el.requestFullscreen().catch(() => {}); } catch (e) {}
+    tick();
+  }
+  function closeFocus() {
+    focusOpen = false;
+    const el = document.getElementById('focus');
+    el.hidden = true; el.innerHTML = '';
+    if (document.getElementById('modal').hidden) document.body.classList.remove('modal-open');
+    releaseWakeLock();
+    try { if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); } catch (e) {}
+  }
+  function renderFocus() {
+    const el = document.getElementById('focus'); if (!timer) return;
+    const t = timerTask(), c = t ? taskCat(t) : null;
+    el.innerHTML = `<div class="focus-inner">
+      <div class="focus-top"><span id="wake-status" class="small muted"></span>
+        <span class="row"><button class="btn quiet small" data-act="focus-test">Test sound</button><button class="btn small" data-act="focus-min">Minimize</button></span></div>
+      <div class="focus-task">${c ? `<span class="cat-label cat-${c}"><span class="cat-dot"></span>${esc(catName(c))}${t.project && projectName(t.project) ? ` · ${esc(projectName(t.project))}` : ''}</span>` : '<span class="label">Focus</span>'}
+        <h2>${esc(t ? t.text : 'Focus session')}</h2></div>
+      <div class="ring-wrap"><svg viewBox="0 0 120 120" aria-hidden="true"><circle class="ring-bg" cx="60" cy="60" r="54"/><circle class="ring-fg" id="ring-fg" cx="60" cy="60" r="54" stroke-dasharray="339.29" stroke-dashoffset="339.29"/></svg>
+        <div class="focus-clock"><div id="focus-time" class="num">--:--</div><div id="focus-sub" class="small muted"></div></div></div>
+      <div id="focus-alert" class="focus-alert" role="alert" ${timer.alerted && !timer.ack ? '' : 'hidden'}>
+        <h3>Time’s up</h3><p>You reached your ${mins(timer.target)} target. Log it, or keep going.</p>
+        <div class="row end"><button class="btn small" data-act="focus-add10">+10 min</button><button class="btn small" data-act="focus-keep">Keep going</button><button class="btn small primary" data-act="stop">Stop and log</button></div></div>
+      <div class="field" style="align-items:center"><span class="label">Target</span><div class="choices">
+        ${[...new Set([...TARGETS, timer.target])].sort((a, b) => a - b).map(v => `<button class="choice" data-act="focus-target" data-v="${v}" aria-pressed="${v === timer.target}">${mins(v)}</button>`).join('')}</div></div>
+      <div class="row focus-actions"><button class="btn" data-act="focus-done">Mark done and stop</button><button class="btn primary" data-act="stop">Stop and log</button></div>
+    </div>`;
+    updateWake();
+  }
+  const clockText = s => s >= 3600 ? `${Math.floor(s / 3600)}:${pad(Math.floor(s / 60) % 60)}:${pad(s % 60)}` : `${pad(Math.floor(s / 60))}:${pad(s % 60)}`;
   function tick() {
-    const el = document.getElementById('clock');
-    if (el && timer) { const s = Math.floor((Date.now() - timer.start) / 1000); el.textContent = `${pad(Math.floor(s / 3600))}:${pad(Math.floor(s / 60) % 60)}:${pad(s % 60)}`; }
+    if (!timer) return;
+    const s = Math.floor((Date.now() - timer.start) / 1000), targetS = timer.target * 60;
+    const card = document.getElementById('clock'); if (card) card.textContent = clockText(s);
+    const over = s >= targetS;
+    document.title = over ? `+${clockText(s - targetS)} · Focus` : `${clockText(targetS - s)} · Focus`;
+    if (focusOpen) {
+      const time = document.getElementById('focus-time'), sub = document.getElementById('focus-sub'), ring = document.getElementById('ring-fg');
+      if (time) time.textContent = over ? `+${clockText(s - targetS)}` : clockText(targetS - s);
+      if (sub) sub.textContent = over ? `over your ${mins(timer.target)} target · ${clockText(s)} total` : `left of ${mins(timer.target)}`;
+      if (ring) ring.style.strokeDashoffset = String(339.29 * (1 - Math.min(1, s / targetS)));
+      document.getElementById('focus').classList.toggle('over', over);
+    }
+    if (over && !timer.alerted) { timer.alerted = true; timer.ack = false; saveTimer(); fireAlert(); }
   }
   setInterval(tick, 1000);
+
+  function fireAlert() {
+    playChime();
+    try { navigator.vibrate && navigator.vibrate([300, 150, 300]); } catch (e) {}
+    if (!focusOpen) openFocus();
+    const a = document.getElementById('focus-alert'); if (a) a.hidden = false;
+  }
+
+  // Keep the screen on while the full-screen view is open (iOS 16.4+, most modern browsers).
+  async function requestWakeLock() {
+    if (!focusOpen || document.hidden) return;
+    try { if ('wakeLock' in navigator && !wakeLock) { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => { wakeLock = null; updateWake(); }); } }
+    catch (e) { wakeLock = null; }
+    updateWake();
+  }
+  function releaseWakeLock() { try { wakeLock && wakeLock.release(); } catch (e) {} wakeLock = null; }
+  function updateWake() {
+    const s = document.getElementById('wake-status'); if (!s) return;
+    s.textContent = wakeLock ? '● Screen stays on' : 'Screen may sleep. Keep the app open for the alert.';
+  }
+
+  // Sound: browsers only allow audio after a tap, so the context is unlocked when you press Focus.
+  function unlockAudio() {
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+      if (!audioCtx) audioCtx = new AC();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain(); g.gain.value = 0.0001;
+      o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime + 0.03);
+    } catch (e) {}
+  }
+  function playChime() {
+    try {
+      if (!audioCtx) unlockAudio(); if (!audioCtx) return;
+      audioCtx.resume && audioCtx.resume();
+      const now = audioCtx.currentTime + 0.05, notes = [880, 1175, 1568];
+      [0, 0.32, 0.64, 1.5, 1.82, 2.14].forEach((dt, i) => {
+        const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+        o.type = 'sine'; o.frequency.value = notes[i % 3];
+        g.gain.setValueAtTime(0.0001, now + dt); g.gain.exponentialRampToValueAtTime(0.4, now + dt + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, now + dt + 0.7);
+        o.connect(g); g.connect(audioCtx.destination); o.start(now + dt); o.stop(now + dt + 0.75);
+      });
+    } catch (e) {}
+  }
+  document.addEventListener('pointerdown', () => { if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume(); }, true);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && timer) { tick(); if (focusOpen) requestWakeLock(); } });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && focusOpen) closeFocus(); });
+
+  document.addEventListener('click', e => {
+    const b = e.target.closest('[data-act]'); if (!b || !timer) return;
+    switch (b.dataset.act) {
+      case 'focus-open': unlockAudio(); openFocus(); break;
+      case 'focus-min': closeFocus(); render(); break;
+      case 'focus-test': unlockAudio(); playChime(); break;
+      case 'focus-add10': timer.target += 10; timer.alerted = false; timer.ack = true; saveTimer(); renderFocus(); tick(); break;
+      case 'focus-keep': timer.ack = true; saveTimer(); { const a = document.getElementById('focus-alert'); if (a) a.hidden = true; } break;
+      case 'focus-target': {
+        const v = Number(b.dataset.v), passed = (Date.now() - timer.start) / 1000 >= v * 60;
+        timer.target = v; timer.alerted = passed; timer.ack = true; saveTimer(); renderFocus(); tick(); break;
+      }
+      case 'focus-done': {
+        const day = timer.day, tid = timer.taskId;
+        stopTimer();
+        const t = getDay(day).tasks.find(x => x.id === tid);
+        if (t && !t.done && !getDay(day).review.closed) {
+          mutateDay(day, d => { const x = d.tasks.find(y => y.id === tid); if (x) x.done = true; });
+          if (t.backlogId) setBacklogDone(t.backlogId, true);
+          toast('Done and logged.');
+        }
+        break;
+      }
+    }
+  });
 
   // ---------- render ----------
   function render() {
@@ -365,8 +504,8 @@
     h += `<section class="card"><div class="sec-head"><h2><span class="step">2</span>Work</h2><span class="chip">${mins(s.minutes)} logged today</span></div>
       <div class="timer ${timer ? 'running' : ''}">
         <div><div class="clock" id="clock">${timer ? '' : '00:00:00'}</div>
-        <p class="muted">${timer ? `On: ${esc(tt ? tt.text : 'a task')}` : 'Press Focus on a task to start the clock. Time is logged when you stop.'}</p></div>
-        ${timer ? '<button class="btn primary" data-act="stop">Stop and log</button>' : ''}
+        <p class="muted">${timer ? `On: ${esc(tt ? tt.text : 'a task')}` : 'Press Focus on a task to open the full-screen timer. It counts down to your target and chimes when time is up.'}</p></div>
+        ${timer ? '<span class="row"><button class="btn" data-act="focus-open">Full screen</button><button class="btn primary" data-act="stop">Stop and log</button></span>' : ''}
       </div>${logPanel(k, d)}</section>`;
 
     // 3 — close
@@ -907,7 +1046,7 @@
   // ---------- in-app triggers (iOS can't schedule web notifications, so the app checks on open) ----------
   function setSetting(patch) { state.settings = Object.assign({}, state.settings, patch); Store.save(); }
   function triggers() {
-    if (!state.ready || document.hidden || !document.getElementById('modal').hidden) return;
+    if (!state.ready || document.hidden || !document.getElementById('modal').hidden || focusOpen) return;
     const k = todayKey(), d = getDay(k), hour = new Date().getHours(), st = state.settings;
     if (d.rest || d.review.closed) return;
     if (st.eveningSummary && hour >= st.eveningHour && st.lastEvening !== k) {
@@ -1048,4 +1187,5 @@
 
   route();
   Store.init();
+  if (timer) openFocus();
 })();

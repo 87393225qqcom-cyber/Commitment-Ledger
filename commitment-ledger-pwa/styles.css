@@ -244,3 +244,24 @@ body.modal-open { overflow: hidden; }
 @media (max-width: 560px) { .add-form.proj-form { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .target-input { width: 200px; max-width: 100%; }
 .proj-form .target-input { width: 100%; }
+
+/* ---- full-screen focus timer ---- */
+.focus { position: fixed; inset: 0; z-index: 40; background: var(--bg); overflow-y: auto; -webkit-overflow-scrolling: touch; display: flex;
+  padding: calc(16px + env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) calc(20px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
+.focus-inner { width: 100%; max-width: 520px; margin: auto; display: flex; flex-direction: column; align-items: center; gap: 22px; text-align: center; }
+.focus-top { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; text-align: left; }
+.focus-task { display: flex; flex-direction: column; gap: 6px; align-items: center; }
+.focus-task h2 { font-size: clamp(22px, 6vw, 30px); overflow-wrap: anywhere; }
+.ring-wrap { position: relative; width: min(76vw, 340px); aspect-ratio: 1; max-width: 100%; }
+.ring-wrap svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.ring-bg { fill: none; stroke: var(--empty); stroke-width: 7; }
+.ring-fg { fill: none; stroke: var(--accent); stroke-width: 7; stroke-linecap: round; transition: stroke-dashoffset 1s linear; }
+.focus.over .ring-fg { stroke: var(--warn); }
+.focus-clock { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
+#focus-time { font-family: var(--mono); font-size: clamp(46px, 15vw, 80px); font-weight: 500; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+.focus.over #focus-time { color: var(--warn); }
+.focus-alert { width: 100%; background: var(--warn-soft); border: 1px solid var(--warn); border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 10px; text-align: left; animation: rise .25s ease-out; }
+.focus-alert h3 { font-size: 20px; color: var(--warn); }
+.focus-actions { justify-content: center; }
+@media (prefers-reduced-motion: reduce) { .ring-fg { transition: none; } }
+#toast { z-index: 50; }
