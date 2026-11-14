@@ -245,23 +245,60 @@ body.modal-open { overflow: hidden; }
 .target-input { width: 200px; max-width: 100%; }
 .proj-form .target-input { width: 100%; }
 
-/* ---- full-screen focus timer ---- */
-.focus { position: fixed; inset: 0; z-index: 40; background: var(--bg); overflow-y: auto; -webkit-overflow-scrolling: touch; display: flex;
-  padding: calc(16px + env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) calc(20px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
-.focus-inner { width: 100%; max-width: 520px; margin: auto; display: flex; flex-direction: column; align-items: center; gap: 22px; text-align: center; }
-.focus-top { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; text-align: left; }
-.focus-task { display: flex; flex-direction: column; gap: 6px; align-items: center; }
-.focus-task h2 { font-size: clamp(22px, 6vw, 30px); overflow-wrap: anywhere; }
-.ring-wrap { position: relative; width: min(76vw, 340px); aspect-ratio: 1; max-width: 100%; }
-.ring-wrap svg { width: 100%; height: 100%; transform: rotate(-90deg); }
-.ring-bg { fill: none; stroke: var(--empty); stroke-width: 7; }
-.ring-fg { fill: none; stroke: var(--accent); stroke-width: 7; stroke-linecap: round; transition: stroke-dashoffset 1s linear; }
-.focus.over .ring-fg { stroke: var(--warn); }
-.focus-clock { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
-#focus-time { font-family: var(--mono); font-size: clamp(46px, 15vw, 80px); font-weight: 500; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
-.focus.over #focus-time { color: var(--warn); }
-.focus-alert { width: 100%; background: var(--warn-soft); border: 1px solid var(--warn); border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 10px; text-align: left; animation: rise .25s ease-out; }
-.focus-alert h3 { font-size: 20px; color: var(--warn); }
-.focus-actions { justify-content: center; }
-@media (prefers-reduced-motion: reduce) { .ring-fg { transition: none; } }
+/* ---- full-screen focus timer: printed-paper dial ---- */
+/* A giant cropped ring of barcode-like ticks that wears away clockwise; type set along the curve. */
+.focus {
+  --paper: #ebeae6; --fink: #121212; --fmute: #6b6b68;
+  --fgrot: "Helvetica Neue", Helvetica, Arial, system-ui, sans-serif;
+  position: fixed; inset: 0; z-index: 40; overflow: hidden; color: var(--fink);
+  background-color: var(--paper);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.5 0 0 0 0 0.5 0 0 0 0 0.5 0 0 0 .07 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  font-family: var(--fgrot);
+}
+@media (prefers-color-scheme: dark) { .focus { --paper: #111110; --fink: #e9e8e3; --fmute: #8d8c87; } }
+.dial { position: absolute; left: 50%; top: 46%; width: min(150vw, 92vh, 1000px); height: min(150vw, 92vh, 1000px); transform: translate(-50%, -50%); pointer-events: none; }
+.dial-svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+/* Counter-rotating rings: each SVG layer spins as a whole, which phones can do on the GPU. */
+.ring-cw { animation: dial-spin 90s linear infinite; will-change: transform; }
+.ring-ccw { animation: dial-spin 60s linear infinite reverse; will-change: transform; }
+@keyframes dial-spin { to { transform: rotate(360deg); } }
+.dial-ticks.inner { opacity: .82; }
+.focus.over .ring-cw { animation-duration: 30s; }
+.dial-ticks { fill: var(--fink); }
+.tk { transition: opacity .9s ease; }
+.tk.gone { opacity: 0; }
+.focus.over .tk { opacity: .16; }
+#dial-dot { fill: var(--fink); }
+.focus.over #dial-dot { animation: blink 1s steps(2, start) infinite; }
+.dial-text { fill: var(--fink); font: 700 21px var(--fgrot); letter-spacing: -0.4px; }
+@keyframes blink { to { visibility: hidden; } }
+
+.f-layer { position: relative; z-index: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-start; gap: 12px;
+  padding: calc(14px + env(safe-area-inset-top, 0px)) max(20px, env(safe-area-inset-right, 0px)) calc(18px + env(safe-area-inset-bottom, 0px)) max(20px, env(safe-area-inset-left, 0px)); pointer-events: none; }
+.f-layer > * { pointer-events: auto; }
+.f-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.f-links { display: flex; gap: 16px; }
+.f-small { font-size: 12px; font-weight: 700; letter-spacing: -0.01em; color: var(--fmute); }
+.f-link { background: none; border: 0; padding: 6px 0; font: 700 14px var(--fgrot); color: var(--fink); cursor: pointer; letter-spacing: -0.02em; }
+.f-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+.f-title { max-width: min(78%, 420px); display: flex; flex-direction: column; gap: 4px; }
+.f-title h2 { font: 700 clamp(20px, 5.4vw, 28px)/1.1 var(--fgrot); letter-spacing: -0.03em; color: var(--fink); overflow-wrap: anywhere; }
+.f-center { position: absolute; left: 50%; top: 46%; transform: translate(-50%, -50%); text-align: center; pointer-events: none; display: flex; flex-direction: column; gap: 2px; }
+#focus-time { font: 700 clamp(64px, 21vw, 132px)/0.9 var(--fgrot); letter-spacing: -0.06em; font-variant-numeric: tabular-nums; color: var(--fink); }
+.f-bottom { margin-top: auto; display: flex; flex-direction: column; gap: 14px; }
+.f-targets { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.f-targets .f-small { margin-right: 6px; }
+.f-chip { background: transparent; border: 1.5px solid var(--fink); color: var(--fink); padding: 5px 11px; border-radius: 0; font: 700 13px var(--fgrot); cursor: pointer; font-variant-numeric: tabular-nums; }
+.f-chip[aria-pressed="true"] { background: var(--fink); color: var(--paper); }
+.f-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.f-btn { flex: 1 1 auto; background: transparent; color: var(--fink); border: 2px solid var(--fink); border-radius: 0; padding: 13px 16px; font: 700 15px var(--fgrot); letter-spacing: -0.02em; cursor: pointer; }
+.f-btn.solid { background: var(--fink); color: var(--paper); }
+.f-btn:focus-visible, .f-chip:focus-visible, .f-link:focus-visible { outline: 2px solid var(--fink); outline-offset: 3px; }
+.f-alert { background: var(--fink); color: var(--paper); padding: 16px; display: flex; flex-direction: column; gap: 10px; animation: rise .25s ease-out; }
+.f-alert p { color: var(--paper); font-size: 14px; }
+.f-alert-head { font: 700 22px var(--fgrot) !important; letter-spacing: -0.03em; }
+.f-btn.inv { border-color: var(--paper); color: var(--paper); padding: 10px 12px; font-size: 14px; }
+.f-btn.inv.solid { background: var(--paper); color: var(--fink); }
+@media (min-width: 760px) and (min-height: 600px) { .f-bottom { max-width: 460px; } }
+@media (prefers-reduced-motion: reduce) { .tk { transition: none; } .focus.over #dial-dot, .ring-cw, .ring-ccw { animation: none; } }
 #toast { z-index: 50; }

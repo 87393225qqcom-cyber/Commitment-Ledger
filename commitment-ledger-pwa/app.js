@@ -135,7 +135,7 @@
   // ---------- storage (this device only: localStorage) ----------
   const LOCAL = 'commitment-ledger.v1';
   const SCHEMA = 1;
-  const DEFAULT_SETTINGS = { morningBriefing: true, eveningSummary: true, eveningHour: 18, lastBriefing: null, lastEvening: null, lastBackup: null };
+  const DEFAULT_SETTINGS = { alarmSound: 'celebration', morningBriefing: true, eveningSummary: true, eveningHour: 18, lastBriefing: null, lastEvening: null, lastBackup: null };
   const Store = {
     backend: 'local', saveTimer: null, failed: false,
     init() {
@@ -239,26 +239,80 @@
     releaseWakeLock();
     try { if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); } catch (e) {}
   }
+  // The dial: a ring of irregular ticks that wears away clockwise as the session runs.
+  const TR = 262; // radius of the text circle, inside both rings
+  const C330 = 2 * Math.PI * TR;
+  function seededRandom(str) {
+    let h = 1779033703 ^ str.length;
+    for (let i = 0; i < str.length; i++) { h = Math.imul(h ^ str.charCodeAt(i), 3432918353); h = (h << 13) | (h >>> 19); }
+    let a = h >>> 0;
+    return () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  }
+  // One ring of ticks. `top` is the distance in from the dial's edge (viewBox 1000, centre 500).
+  function ringTicks(rnd, o) {
+    const phase = rnd() * 6.28;
+    let out = '';
+    for (let i = 0; i < o.n; i++) {
+      const f = i / o.n, density = Math.sin(f * Math.PI * o.waves + phase) * 0.5 + 0.5;
+      if (rnd() < o.gap + (1 - density) * o.gapWave) continue;
+      const k = rnd();
+      let w, len;
+      if (k < o.thin) { w = o.wThin[0] + rnd() * o.wThin[1]; len = o.len[0] + rnd() * o.len[1]; }
+      else if (k < o.thin + o.mid) { w = o.wMid[0] + rnd() * o.wMid[1]; len = o.len[0] + 10 + rnd() * o.len[1]; }
+      else { w = o.wBig[0] + rnd() * o.wBig[1]; len = o.len[0] + rnd() * o.len[1] * 0.8; }
+      const top = o.top + rnd() * o.topJitter;
+      let s = `<rect x="${(500 - w / 2).toFixed(1)}" y="${top.toFixed(1)}" width="${w.toFixed(1)}" height="${len.toFixed(1)}"/>`;
+      if (w > 18 && rnd() < 0.6) {
+        const w2 = w * (0.35 + rnd() * 0.45), x2 = rnd() < 0.5 ? 500 - w / 2 : 500 + w / 2 - w2;
+        s += `<rect x="${x2.toFixed(1)}" y="${(top + len + 5).toFixed(1)}" width="${w2.toFixed(1)}" height="${(14 + rnd() * 26).toFixed(1)}"/>`;
+      }
+      const a = f * 360 + (rnd() - 0.5) * 0.8;
+      out += `<g${o.track ? ` class="tk" data-f="${f.toFixed(4)}"` : ''} transform="rotate(${a.toFixed(2)} 500 500)">${s}</g>`;
+    }
+    return out;
+  }
+  // Two overlapping concentric rings, each its own layer so the phone can spin them cheaply:
+  // the outer ring turns clockwise and wears away with the session; the inner one turns counter-clockwise.
+  function dialSVG(seed) {
+    const rnd = seededRandom(seed || 'focus');
+    const outer = ringTicks(rnd, { n: 168, waves: 5, gap: 0.08, gapWave: 0.32, thin: 0.55, mid: 0.31, wThin: [3, 2.5], wMid: [8, 7], wBig: [22, 16], len: [34, 54], top: 22, topJitter: 22, track: true });
+    const inner = ringTicks(rnd, { n: 210, waves: 7, gap: 0.1, gapWave: 0.4, thin: 0.72, mid: 0.22, wThin: [1.6, 2], wMid: [5, 5], wBig: [14, 10], len: [18, 44], top: 108, topJitter: 26, track: false });
+    const lap = `A${TR},${TR} 0 1,1 500,${500 + TR} A${TR},${TR} 0 1,1 500,${500 - TR}`;
+    return `<svg class="dial-svg ring-cw" viewBox="0 0 1000 1000" aria-hidden="true"><g class="dial-ticks">${outer}</g></svg>
+      <svg class="dial-svg ring-ccw" viewBox="0 0 1000 1000" aria-hidden="true"><g class="dial-ticks inner">${inner}</g></svg>
+      <svg class="dial-svg" viewBox="0 0 1000 1000" aria-hidden="true">
+        <defs><path id="dial-path" d="M500,${500 - TR} ${lap} ${lap}"/></defs>
+        <circle id="dial-dot" r="11" cx="500" cy="${500 - TR}"/>
+        <text class="dial-text"><textPath id="dial-label" href="#dial-path" startOffset="0"></textPath></text>
+        <text class="dial-text"><textPath id="dial-meta" href="#dial-path" startOffset="25%"></textPath></text>
+      </svg>`;
+  }
+  let dialTicks = [];
+
   function renderFocus() {
     const el = document.getElementById('focus'); if (!timer) return;
     const t = timerTask(), c = t ? taskCat(t) : null;
-    el.innerHTML = `<div class="focus-inner">
-      <div class="focus-top"><span id="wake-status" class="small muted"></span>
-        <span class="row"><button class="btn quiet small" data-act="focus-test">Test sound</button><button class="btn small" data-act="focus-min">Minimize</button></span></div>
-      <div class="focus-task">${c ? `<span class="cat-label cat-${c}"><span class="cat-dot"></span>${esc(catName(c))}${t.project && projectName(t.project) ? ` · ${esc(projectName(t.project))}` : ''}</span>` : '<span class="label">Focus</span>'}
-        <h2>${esc(t ? t.text : 'Focus session')}</h2></div>
-      <div class="ring-wrap"><svg viewBox="0 0 120 120" aria-hidden="true"><circle class="ring-bg" cx="60" cy="60" r="54"/><circle class="ring-fg" id="ring-fg" cx="60" cy="60" r="54" stroke-dasharray="339.29" stroke-dashoffset="339.29"/></svg>
-        <div class="focus-clock"><div id="focus-time" class="num">--:--</div><div id="focus-sub" class="small muted"></div></div></div>
-      <div id="focus-alert" class="focus-alert" role="alert" ${timer.alerted && !timer.ack ? '' : 'hidden'}>
-        <h3>Time’s up</h3><p>You reached your ${mins(timer.target)} target. Log it, or keep going.</p>
-        <div class="row end"><button class="btn small" data-act="focus-add10">+10 min</button><button class="btn small" data-act="focus-keep">Keep going</button><button class="btn small primary" data-act="stop">Stop and log</button></div></div>
-      <div class="field" style="align-items:center"><span class="label">Target</span><div class="choices">
-        ${[...new Set([...TARGETS, timer.target])].sort((a, b) => a - b).map(v => `<button class="choice" data-act="focus-target" data-v="${v}" aria-pressed="${v === timer.target}">${mins(v)}</button>`).join('')}</div></div>
-      <div class="row focus-actions"><button class="btn" data-act="focus-done">Mark done and stop</button><button class="btn primary" data-act="stop">Stop and log</button></div>
-    </div>`;
+    const meta = [c ? catName(c) : null, t && t.project ? projectName(t.project) : null].filter(Boolean).join(' · ');
+    el.innerHTML = `<div class="dial">${dialSVG(timer.taskId + ':' + timer.start)}</div>
+      <div class="f-layer">
+        <div class="f-top"><span id="wake-status" class="f-small"></span>
+          <span class="f-links"><button class="f-link" data-act="focus-test">Test sound</button><button class="f-link" data-act="focus-min">Minimize</button></span></div>
+        <div class="f-title">${meta ? `<span class="f-small">${esc(meta)}</span>` : ''}<h2>${esc(t ? t.text : 'Focus session')}</h2></div>
+        <div class="f-center"><div id="focus-time">--:--</div><div id="focus-sub" class="f-small"></div></div>
+        <div class="f-bottom">
+          <div id="focus-alert" class="f-alert" role="alert" ${timer.alerted && !timer.ack ? '' : 'hidden'}>
+            <p class="f-alert-head">● Time’s up</p><p>You reached your ${mins(timer.target)} target. Log it, or keep going.</p>
+            <div class="f-row"><button class="f-btn inv" data-act="focus-add10">+10 min</button><button class="f-btn inv" data-act="focus-keep">Keep going</button><button class="f-btn inv solid" data-act="stop">Stop and log</button></div></div>
+          <div class="f-targets"><span class="f-small">Target</span>
+            ${[...new Set([...TARGETS, timer.target])].sort((a, b) => a - b).map(v => `<button class="f-chip" data-act="focus-target" data-v="${v}" aria-pressed="${v === timer.target}">${mins(v)}</button>`).join('')}</div>
+          <div class="f-row"><button class="f-btn" data-act="focus-done">Mark done</button><button class="f-btn solid" data-act="stop">Stop and log</button></div>
+        </div>
+      </div>`;
+    dialTicks = [...el.querySelectorAll('.tk')].map(g => ({ g, f: Number(g.dataset.f), gone: false }));
     updateWake();
   }
   const clockText = s => s >= 3600 ? `${Math.floor(s / 3600)}:${pad(Math.floor(s / 60) % 60)}:${pad(s % 60)}` : `${pad(Math.floor(s / 60))}:${pad(s % 60)}`;
+  function endsAt() { return new Date(timer.start + timer.target * 60000).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }); }
   function tick() {
     if (!timer) return;
     const s = Math.floor((Date.now() - timer.start) / 1000), targetS = timer.target * 60;
@@ -266,10 +320,17 @@
     const over = s >= targetS;
     document.title = over ? `+${clockText(s - targetS)} · Focus` : `${clockText(targetS - s)} · Focus`;
     if (focusOpen) {
-      const time = document.getElementById('focus-time'), sub = document.getElementById('focus-sub'), ring = document.getElementById('ring-fg');
+      const time = document.getElementById('focus-time'), sub = document.getElementById('focus-sub');
       if (time) time.textContent = over ? `+${clockText(s - targetS)}` : clockText(targetS - s);
-      if (sub) sub.textContent = over ? `over your ${mins(timer.target)} target · ${clockText(s)} total` : `left of ${mins(timer.target)}`;
-      if (ring) ring.style.strokeDashoffset = String(339.29 * (1 - Math.min(1, s / targetS)));
+      if (sub) sub.textContent = over ? `over your ${mins(timer.target)} target` : `left of ${mins(timer.target)}`;
+      const p = over ? 1 : s / targetS;
+      dialTicks.forEach(tk => { const gone = !over && tk.f < p; if (gone !== tk.gone) { tk.gone = gone; tk.g.classList.toggle('gone', gone); } });
+      const ang = 2 * Math.PI * (over ? 0 : p);
+      const dot = document.getElementById('dial-dot');
+      if (dot) { dot.setAttribute('cx', (500 + TR * Math.sin(ang)).toFixed(1)); dot.setAttribute('cy', (500 - TR * Math.cos(ang)).toFixed(1)); }
+      const pos = over ? 0 : p, label = document.getElementById('dial-label'), metaEl = document.getElementById('dial-meta');
+      if (label) { label.setAttribute('startOffset', ((pos * C330 + 26) / (2 * C330) * 100).toFixed(3) + '%'); { const tt = timerTask(); const name = tt ? (tt.text.length > 42 ? tt.text.slice(0, 40) + "…" : tt.text) : "Focus"; label.textContent = over ? `Over by ${clockText(s - targetS)}` : name; } }
+      if (metaEl) { metaEl.setAttribute('startOffset', (((pos + 0.5) % 1) * C330 / (2 * C330) * 100).toFixed(3) + '%'); metaEl.textContent = `Ends ${endsAt()} · ${mins(timer.target)} session`; }
       document.getElementById('focus').classList.toggle('over', over);
     }
     if (over && !timer.alerted) { timer.alerted = true; timer.ack = false; saveTimer(); fireAlert(); }
@@ -278,6 +339,9 @@
 
   function fireAlert() {
     playChime();
+    // Play once more after 8 s if the alert is still waiting for you.
+    const startedAt = timer && timer.start;
+    setTimeout(() => { const a = document.getElementById("focus-alert"); if (timer && timer.start === startedAt && !timer.ack && a && !a.hidden) playChime(); }, 8000);
     try { navigator.vibrate && navigator.vibrate([300, 150, 300]); } catch (e) {}
     if (!focusOpen) openFocus();
     const a = document.getElementById('focus-alert'); if (a) a.hidden = false;
@@ -306,19 +370,65 @@
       o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime + 0.03);
     } catch (e) {}
   }
-  function playChime() {
+  // ---- Alarm sounds, synthesized live (no audio files) ----
+  const SOUNDS = [
+    { id: 'celebration', name: 'Celebration', hint: 'Bright bell fanfare with a sparkle finish' },
+    { id: 'marimba', name: 'Marimba', hint: 'Bouncy wooden riff' },
+    { id: 'musicbox', name: 'Music box', hint: 'Soft little tune' }
+  ];
+  const NOTE = n => 440 * Math.pow(2, (n - 69) / 12); // MIDI note number to Hz
+  function voice(ctx, out, t, midi, dur, vel, kind) {
+    const f = NOTE(midi), env = ctx.createGain();
+    env.gain.setValueAtTime(0.0001, t);
+    env.gain.exponentialRampToValueAtTime(vel, t + (kind === 'marimba' ? 0.004 : 0.008));
+    env.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    env.connect(out);
+    const osc = (type, freq, gain) => { const o = ctx.createOscillator(), g = ctx.createGain(); o.type = type; o.frequency.value = freq; g.gain.value = gain; o.connect(g); g.connect(env); o.start(t); o.stop(t + dur + 0.05); return o; };
+    if (kind === 'bell') {
+      // FM bell: a modulator at 3.5x makes the metallic shimmer, fading faster than the tone.
+      const car = osc('sine', f, 1);
+      const mod = ctx.createOscillator(), mg = ctx.createGain();
+      mod.frequency.value = f * 3.5; mg.gain.setValueAtTime(f * 1.6, t); mg.gain.exponentialRampToValueAtTime(1, t + dur * 0.6);
+      mod.connect(mg); mg.connect(car.frequency); mod.start(t); mod.stop(t + dur + 0.05);
+      osc('triangle', f * 2, 0.12);
+    } else if (kind === 'marimba') {
+      osc('sine', f, 1); osc('sine', f * 4, 0.18); osc('sine', f * 10, 0.04);
+    } else {
+      osc('triangle', f, 0.9); osc('sine', f * 2, 0.25); osc('sine', f * 3, 0.08);
+    }
+  }
+  function sparkle(ctx, out, t, len, gain) {
+    // A short burst of filtered noise: confetti / shaker.
+    const n = Math.floor(ctx.sampleRate * len), buf = ctx.createBuffer(1, n, ctx.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 2);
+    const src = ctx.createBufferSource(), bp = ctx.createBiquadFilter(), g = ctx.createGain();
+    src.buffer = buf; bp.type = 'bandpass'; bp.frequency.value = 7500; bp.Q.value = 0.7; g.gain.value = gain;
+    src.connect(bp); bp.connect(g); g.connect(out); src.start(t);
+  }
+  function playMelody(id) {
+    if (!audioCtx) unlockAudio(); if (!audioCtx) return;
     try {
-      if (!audioCtx) unlockAudio(); if (!audioCtx) return;
-      audioCtx.resume && audioCtx.resume();
-      const now = audioCtx.currentTime + 0.05, notes = [880, 1175, 1568];
-      [0, 0.32, 0.64, 1.5, 1.82, 2.14].forEach((dt, i) => {
-        const o = audioCtx.createOscillator(), g = audioCtx.createGain();
-        o.type = 'sine'; o.frequency.value = notes[i % 3];
-        g.gain.setValueAtTime(0.0001, now + dt); g.gain.exponentialRampToValueAtTime(0.4, now + dt + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, now + dt + 0.7);
-        o.connect(g); g.connect(audioCtx.destination); o.start(now + dt); o.stop(now + dt + 0.75);
-      });
+      const ctx = audioCtx; ctx.resume && ctx.resume();
+      const out = ctx.createDynamicsCompressor(), master = ctx.createGain();
+      master.gain.value = 0.9; out.connect(master); master.connect(ctx.destination);
+      const t0 = ctx.currentTime + 0.06;
+      const play = (notes, kind) => notes.forEach(([dt, m, dur, v]) => voice(ctx, out, t0 + dt, m, dur, v, kind));
+      if (id === 'marimba') {
+        // C major pentatonic bounce, up and back, landing on a high C with a chord.
+        play([[0, 72, .35, .5], [.11, 76, .35, .5], [.22, 79, .35, .5], [.33, 81, .35, .5], [.44, 79, .3, .45], [.55, 84, .5, .6],
+          [.86, 79, .3, .4], [.97, 81, .3, .45], [1.08, 84, .9, .65], [1.08, 76, .9, .35], [1.08, 72, .9, .3]], 'marimba');
+      } else if (id === 'musicbox') {
+        play([[0, 88, .9, .35], [.26, 91, .9, .35], [.52, 96, 1.1, .4], [.86, 95, .7, .3], [1.12, 91, .7, .3], [1.4, 96, 1.6, .42], [1.4, 84, 1.6, .2]], 'box');
+      } else {
+        // Celebration: rising arpeggio, a quick pickup, then a big bell chord with sparkles.
+        play([[0, 67, .5, .35], [.1, 72, .5, .38], [.2, 76, .5, .4], [.3, 79, .7, .45],
+          [.56, 76, .25, .35], [.66, 79, .25, .38], [.78, 84, 1.8, .6], [.78, 76, 1.6, .3], [.78, 72, 1.6, .28], [.78, 60, 1.4, .25]], 'bell');
+        sparkle(ctx, out, t0 + .78, .5, .35);
+        [[1.0, 100], [1.12, 103], [1.24, 105], [1.4, 108]].forEach(([dt, m]) => voice(ctx, out, t0 + dt, m, .45, .12, 'bell'));
+      }
     } catch (e) {}
   }
+  function playChime() { playMelody((state.settings && state.settings.alarmSound) || 'celebration'); }
   document.addEventListener('pointerdown', () => { if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume(); }, true);
   document.addEventListener('visibilitychange', () => { if (!document.hidden && timer) { tick(); if (focusOpen) requestWakeLock(); } });
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && focusOpen) closeFocus(); });
@@ -1098,6 +1208,7 @@
     if (t.id === 'set-morning') { setSetting({ morningBriefing: t.checked }); render(); }
     if (t.id === 'set-evening') { setSetting({ eveningSummary: t.checked }); render(); }
     if (t.id === 'set-hour') { setSetting({ eveningHour: Number(t.value) }); render(); }
+    if (t.id === 'set-sound') { setSetting({ alarmSound: t.value }); unlockAudio(); playChime(); render(); }
   });
 
   // ---------- settings view ----------
@@ -1114,6 +1225,12 @@
       <div class="row"><button class="btn small" data-act="show-briefing">Preview briefing</button><button class="btn small" data-act="show-evening">Preview evening summary</button></div>
       <p class="muted small">For a nudge to open the app, add two repeating reminders in the iPhone Reminders or Clock app (for example 9:00 and ${st.eveningHour}:00).</p>
     </section>`;
+
+    const snd = SOUNDS.find(x => x.id === st.alarmSound) || SOUNDS[0];
+    h += `<section class="card"><div class="sec-head"><h2>Focus timer sound</h2></div>
+      <p class="muted small">Plays when your focus target is reached, and once more 8 seconds later if you haven’t responded. Turn the ringer on (silent switch off) to hear it.</p>
+      <div class="row"><select id="set-sound" aria-label="Alarm sound">${SOUNDS.map(x => `<option value="${x.id}"${x.id === snd.id ? " selected" : ""}>${esc(x.name)}</option>`).join("")}</select>
+        <button class="btn" data-act="preview-sound">▶ Preview</button><span class="muted small">${esc(snd.hint)}</span></div></section>`;
 
     h += `<section class="card"><div class="sec-head"><h2>Backup</h2>${lb ? `<span class="chip ${daysBetween(fmt(lb), todayKey()) >= 7 ? 'warn' : 'on'}">Last backup ${esc(shortDate(fmt(lb)))}</span>` : '<span class="chip warn">Never backed up</span>'}</div>
       <p class="muted small">Your ledger is stored only on this device: <span class="num">${nDays}</span> days, <span class="num">${nProj}</span> projects, <span class="num">${nTasks}</span> listed tasks. Export a backup file every week or so and keep it in iCloud Drive or Files.</p>
@@ -1143,6 +1260,7 @@
         setTimeout(() => { const el = document.getElementById('rev-note'); if (el) { el.scrollIntoView({ block: 'center' }); el.focus(); } else if (!getDay(k).locked) toast('Lock in or add what you did first, then close the day.'); }, 80); break;
       case 'show-briefing': showModal(briefingModal(k)); break;
       case 'show-evening': showModal(eveningModal(k)); break;
+      case 'preview-sound': unlockAudio(); playChime(); break;
       case 'export': exportData(); break;
       case 'copy-backup': copyBackup(); break;
       case 'import-cancel': state.ui.pendingImport = null; render(); break;
