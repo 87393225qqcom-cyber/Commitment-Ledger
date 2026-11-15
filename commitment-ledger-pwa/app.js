@@ -300,13 +300,14 @@
   function renderFocus() {
     const el = document.getElementById('focus'); if (!timer) return;
     const t = timerTask(), c = t ? taskCat(t) : null;
+    const catCls = c === 'passion' || c === 'must' || c === 'baseline' ? 'cat-' + c : '';
     const meta = [c ? catName(c) : null, t && t.project ? projectName(t.project) : null].filter(Boolean).join(' · ');
     el.innerHTML = `<div class="dial">${dialSVG(timer.taskId + ':' + timer.start)}</div>
       <div class="f-layer">
         <div class="f-top"><span id="wake-status" class="f-small"></span>
           <span class="f-links"><button class="f-link" data-act="focus-test">Test sound</button><button class="f-link" data-act="focus-min">Minimize</button></span></div>
         <div class="f-title">${meta ? `<span class="f-small">${esc(meta)}</span>` : ''}<h2>${esc(t ? t.text : 'Focus session')}</h2>${t && (t.steps || []).length && !wrapUp ? `<ul class="f-steps">${t.steps.map(st => `<li><button class="f-step${st.done ? ' done' : ''}" data-act="step-toggle" data-id="${t.id}" data-step="${st.id}" aria-pressed="${!!st.done}"><span class="f-box">${st.done ? '✓' : ''}</span>${esc(st.text)}</button></li>`).join('')}</ul>` : ''}</div>
-        <div class="f-center"><div id="focus-time">--:--</div><div id="focus-sub" class="f-small"></div></div>
+        <div class="f-center"><div id="focus-time" class="${catCls}">--:--</div><div id="focus-sub" class="f-small"></div></div>
         <div class="f-bottom">${wrapUp ? wrapPanel() : `
           <div id="focus-alert" class="f-alert" role="alert" ${timer.alerted && !timer.ack ? '' : 'hidden'}>
             <p class="f-alert-head">● Time’s up</p><p>You reached your ${mins(timer.target)} target. End the session, or keep going.</p>
