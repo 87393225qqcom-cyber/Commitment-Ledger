@@ -1413,7 +1413,7 @@
     return `<section class="card balance"><div class="sec-head"><h2>Today’s balance</h2><span class="chip" id="bal-total">0m</span></div>
       <div class="bal-wrap">
         <div class="donut">
-          <svg id="donut" viewBox="0 0 200 200" role="img" aria-label="Today's time by category"><circle class="donut-bg" cx="100" cy="100" r="80"/><g id="donut-arcs" transform="rotate(-90 100 100)"></g></svg>
+          <svg id="donut" viewBox="0 0 200 200" role="img" aria-label="Today's time by category"><circle class="donut-bg" cx="100" cy="100" r="80"/><circle class="donut-well" cx="100" cy="100" r="66"/><g id="donut-arcs" transform="rotate(-90 100 100)"></g></svg>
           <canvas id="miner" width="96" height="88" aria-hidden="true"></canvas>
           <span id="miner-state" class="miner-state"></span>
         </div>
