@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Commitment Ledger</title>
-  <meta name="description" content="A private daily accountability ledger: commit, work, close the day.">
+  <meta name="description" content="一个私密的每日自我承诺账本：承诺、专注、结束一天。">
 
   <!-- Installable app (Android/desktop read the manifest; iOS reads the apple-* tags) -->
   <link rel="manifest" href="manifest.webmanifest">
@@ -28,8 +28,8 @@
 <body>
 <div class="wrap">
   <div id="affirm" class="affirm" hidden>
-    <label class="affirm-label" for="affirm-text"><span>Note to self</span><span id="affirm-meta"></span></label>
-    <textarea id="affirm-text" rows="1" maxlength="160" spellcheck="false" placeholder="Type a few encouraging words for today…"></textarea>
+    <label class="affirm-label" for="affirm-text"><span id="affirm-label">写给自己的话</span><span id="affirm-meta"></span></label>
+    <textarea id="affirm-text" rows="1" maxlength="160" spellcheck="false" placeholder="写下几句鼓励自己的话…"></textarea>
   </div>
   <header class="top">
     <div>
@@ -39,13 +39,14 @@
     <div class="pills" id="pills"></div>
   </header>
   <div id="install" class="install" hidden></div>
-  <nav class="tabs" aria-label="Views">
-    <a href="#today" data-view="today"><canvas class="tab-icon" width="72" height="72" aria-hidden="true"></canvas>Today</a>
-    <a href="#history" data-view="history">History</a>
-    <a href="#projects" data-view="projects">Projects</a>
-    <a href="#settings" data-view="settings">Settings</a>
+  <nav class="tabs" id="tabs" aria-label="视图">
+    <a href="#today" data-view="today"><canvas class="tab-icon" width="72" height="72" aria-hidden="true"></canvas>今天</a>
+    <a href="#history" data-view="history">历史</a>
+    <a href="#review" data-view="review">回顾</a>
+    <a href="#projects" data-view="projects">项目</a>
+    <a href="#settings" data-view="settings">设置</a>
   </nav>
-  <main id="view"><div class="card empty">Opening your ledger…</div></main>
+  <main id="view"><div class="card empty">正在打开你的账本…</div></main>
   <footer id="note"></footer>
 </div>
 <div id="focus" class="focus" hidden role="dialog" aria-modal="true" aria-label="Focus timer"></div>
