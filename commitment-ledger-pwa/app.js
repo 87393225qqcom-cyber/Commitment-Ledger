@@ -279,15 +279,12 @@
     }
     return out;
   }
-  // Two overlapping concentric rings, each its own layer so the phone can spin them cheaply:
-  // the outer ring turns clockwise and wears away with the session; the inner one turns counter-clockwise.
+  // One tracked ring of irregular ticks that wears away clockwise as the session runs.
   function dialSVG(seed) {
     const rnd = seededRandom(seed || 'focus');
-    const outer = ringTicks(rnd, { n: 168, waves: 5, gap: 0.08, gapWave: 0.32, thin: 0.55, mid: 0.31, wThin: [3, 2.5], wMid: [8, 7], wBig: [22, 16], len: [34, 54], top: 22, topJitter: 22, track: true });
-    const inner = ringTicks(rnd, { n: 210, waves: 7, gap: 0.1, gapWave: 0.4, thin: 0.72, mid: 0.22, wThin: [1.6, 2], wMid: [5, 5], wBig: [14, 10], len: [18, 44], top: 108, topJitter: 26, track: false });
+    const ring = ringTicks(rnd, { n: 200, waves: 7, gap: 0.1, gapWave: 0.4, thin: 0.72, mid: 0.22, wThin: [2, 2.2], wMid: [6, 6], wBig: [16, 12], len: [22, 50], top: 104, topJitter: 24, track: true });
     const lap = `A${TR},${TR} 0 1,1 500,${500 + TR} A${TR},${TR} 0 1,1 500,${500 - TR}`;
-    return `<svg class="dial-svg ring-cw" viewBox="0 0 1000 1000" aria-hidden="true"><g class="dial-ticks">${outer}</g></svg>
-      <svg class="dial-svg ring-ccw" viewBox="0 0 1000 1000" aria-hidden="true"><g class="dial-ticks inner">${inner}</g></svg>
+    return `<svg class="dial-svg ring-spin" viewBox="0 0 1000 1000" aria-hidden="true"><g class="dial-ticks">${ring}</g></svg>
       <svg class="dial-svg" viewBox="0 0 1000 1000" aria-hidden="true">
         <defs><path id="dial-path" d="M500,${500 - TR} ${lap} ${lap}"/></defs>
         <circle id="dial-dot" r="11" cx="500" cy="${500 - TR}"/>

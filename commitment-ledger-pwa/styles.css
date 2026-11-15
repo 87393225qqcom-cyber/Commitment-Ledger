@@ -257,15 +257,11 @@ body.modal-open { overflow: hidden; }
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .focus { --paper: #111110; --fink: #e9e8e3; --fmute: #8d8c87; } }
 :root[data-theme="dark"] .focus { --paper: #111110; --fink: #e9e8e3; --fmute: #8d8c87; }
-.dial { position: absolute; left: 50%; top: 46%; width: min(150vw, 92vh, 1000px); height: min(150vw, 92vh, 1000px); transform: translate(-50%, -50%); pointer-events: none; }
+.dial { position: absolute; left: 50%; top: 46%; width: min(120vw, 84vh, 800px); height: min(120vw, 84vh, 800px); transform: translate(-50%, -50%); pointer-events: none; }
 .dial-svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-/* Counter-rotating rings: each SVG layer spins as a whole, which phones can do on the GPU. */
-.ring-cw { animation: dial-spin 90s linear infinite; will-change: transform; }
-.ring-ccw { animation: dial-spin 60s linear infinite reverse; will-change: transform; }
-@keyframes dial-spin { to { transform: rotate(360deg); } }
-.dial-ticks.inner { opacity: .82; }
-.focus.over .ring-cw { animation-duration: 30s; }
 .dial-ticks { fill: var(--fink); }
+.ring-spin { animation: dial-spin 90s linear infinite; will-change: transform; }
+@keyframes dial-spin { to { transform: rotate(-360deg); } }
 .tk { transition: opacity .9s ease; }
 .tk.gone { opacity: 0; }
 .focus.over .tk { opacity: .16; }
@@ -277,7 +273,6 @@ body.modal-open { overflow: hidden; }
 .f-layer { position: relative; z-index: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-start; gap: 12px;
   padding: calc(14px + env(safe-area-inset-top, 0px)) max(20px, env(safe-area-inset-right, 0px)) calc(18px + env(safe-area-inset-bottom, 0px)) max(20px, env(safe-area-inset-left, 0px)); pointer-events: none; }
 .f-layer > * { pointer-events: auto; }
-.f-layer::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 280px; z-index: -1; pointer-events: none; background: linear-gradient(180deg, var(--paper) 0%, var(--paper) 60%, transparent 100%); }
 .f-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
 .f-links { display: flex; gap: 16px; }
 .f-small { font-size: 12px; font-weight: 700; letter-spacing: -0.01em; color: var(--fmute); }
@@ -286,7 +281,7 @@ body.modal-open { overflow: hidden; }
 .f-title { max-width: min(78%, 420px); display: flex; flex-direction: column; gap: 4px; }
 .f-title h2 { font: 700 clamp(20px, 5.4vw, 28px)/1.1 var(--fgrot); letter-spacing: -0.03em; color: var(--fink); overflow-wrap: anywhere; }
 .f-center { position: absolute; left: 50%; top: 46%; transform: translate(-50%, -50%); text-align: center; pointer-events: none; display: flex; flex-direction: column; gap: 2px; }
-#focus-time { font: 700 clamp(52px, 17vw, 120px)/0.95 var(--fgrot); letter-spacing: -0.03em; font-variant-numeric: tabular-nums; color: var(--cat, var(--fink)); }
+#focus-time { font-weight: 700; font-size: clamp(52px, 17vw, 120px); line-height: 0.95; font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; color: var(--cat, var(--fink)); }
 .f-bottom { margin-top: auto; display: flex; flex-direction: column; gap: 14px; }
 .f-targets { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .f-targets .f-small { margin-right: 6px; }
@@ -302,7 +297,7 @@ body.modal-open { overflow: hidden; }
 .f-btn.inv { border-color: var(--paper); color: var(--paper); padding: 10px 12px; font-size: 14px; }
 .f-btn.inv.solid { background: var(--paper); color: var(--fink); }
 @media (min-width: 760px) and (min-height: 600px) { .f-bottom { max-width: 460px; } }
-@media (prefers-reduced-motion: reduce) { .tk { transition: none; } .focus.over #dial-dot, .ring-cw, .ring-ccw { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .tk { transition: none; } .ring-spin, .focus.over #dial-dot { animation: none; } }
 #toast { z-index: 50; }
 #toast { display: flex; align-items: center; gap: 14px; }
 .toast-btn { background: none; border: 0; color: inherit; font: inherit; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; padding: 4px 2px; }
