@@ -15,7 +15,7 @@
   ];
   const metricName = id => (METRICS.find(m => m.id === id) || METRICS[1]).name;
   const projMetric = p => METRICS.some(m => m.id === p.metric) ? p.metric : 'time';
-  const nf = n => Math.round(n).toLocaleString();
+  const nf = n => Math.round(n).toLocaleString('en-US');
   const targetHint = (metric, hasDue) => metric === 'words' ? 'Target words (optional)' : metric === 'time' ? (hasDue ? 'Total hours (optional)' : 'Hours per week (optional)') : '';
 
   // ---------- progress maths ----------
@@ -78,9 +78,9 @@
   const dayKeyOf = when => fmt(new Date(new Date(when).getTime() - dayStartH() * 3600000));
   const todayKey = () => dayKeyOf(Date.now());
   const weekStart = k => { const d = parse(k); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return fmt(d); };
-  const longDate = k => parse(k).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
-  const shortDate = k => parse(k).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
-  const fmtTime = iso => iso ? new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) : '';
+  const longDate = k => parse(k).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' }); // e.g. Saturday, Nov 14
+  const shortDate = k => parse(k).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  const fmtTime = iso => iso ? new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
   const daysBetween = (a, b) => Math.round((parse(b) - parse(a)) / 86400000);
   const mins = m => m >= 60 ? `${Math.floor(m / 60)}h ${pad(m % 60)}m` : `${m}m`;
   const rid = () => Math.random().toString(36).slice(2, 10);
@@ -305,7 +305,7 @@
       <div class="f-layer">
         <div class="f-top"><span id="wake-status" class="f-small"></span>
           <span class="f-links"><button class="f-link" data-act="focus-test">Test sound</button><button class="f-link" data-act="focus-min">Minimize</button></span></div>
-        <div class="f-title">${meta ? `<span class="f-small">${esc(meta)}</span>` : ''}<h2>${esc(t ? t.text : 'Focus session')}</h2></div>
+        <div class="f-title">${meta ? `<span class="f-small">${esc(meta)}</span>` : ''}<h2>${esc(t ? t.text : 'Focus session')}</h2>${t && (t.steps || []).length && !wrapUp ? `<ul class="f-steps">${t.steps.map(st => `<li><button class="f-step${st.done ? ' done' : ''}" data-act="step-toggle" data-id="${t.id}" data-step="${st.id}" aria-pressed="${!!st.done}"><span class="f-box">${st.done ? '✓' : ''}</span>${esc(st.text)}</button></li>`).join('')}</ul>` : ''}</div>
         <div class="f-center"><div id="focus-time">--:--</div><div id="focus-sub" class="f-small"></div></div>
         <div class="f-bottom">${wrapUp ? wrapPanel() : `
           <div id="focus-alert" class="f-alert" role="alert" ${timer.alerted && !timer.ack ? '' : 'hidden'}>
@@ -321,7 +321,7 @@
     updateWake();
   }
   const clockText = s => s >= 3600 ? `${Math.floor(s / 3600)}:${pad(Math.floor(s / 60) % 60)}:${pad(s % 60)}` : `${pad(Math.floor(s / 60))}:${pad(s % 60)}`;
-  function endsAt() { return new Date(timer.start + timer.target * 60000).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }); }
+  function endsAt() { return new Date(timer.start + timer.target * 60000).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }); }
   function tick() {
     if (!timer) return;
     const s = Math.floor((Date.now() - timer.start) / 1000), targetS = timer.target * 60;
@@ -513,6 +513,9 @@
     meta.push(`<span class="num">${t.minutes ? mins(t.minutes) : '0m'} / ${mins(t.est || 0)}</span>`);
     const tw = (d.logs || []).filter(l => l.taskId === t.id && l.kind === 'words').reduce((a, l) => a + (l.value || 0), 0);
     if (tw) meta.push(`<span class="num">${nf(tw)} words</span>`);
+    const steps = t.steps || [], sDone = steps.filter(x => x.done).length;
+    if (steps.length) meta.push(`<span class="num">${sDone}/${steps.length} steps</span>`);
+    const stepsEditable = !d.review.closed && !t.dropped;
     if (t.late) meta.push('<span class="unplanned">unplanned</span>');
     if (t.dropped) meta.push(`<span>Dropped: ${esc(t.reason || 'no reason given')}</span>`);
     if (t.carried) meta.push('<span>carried over</span>');
@@ -524,7 +527,7 @@
     else if (!d.review.closed) {
       if (t.dropped) actions = `<button class="btn quiet small" data-act="restore" data-id="${t.id}">Restore</button>`;
       else if (!t.done) actions = `${running ? `<button class="btn small primary" data-act="focus-open">Timer</button>` : timer ? '' : `<button class="btn small" data-act="focus" data-id="${t.id}">Focus</button>`}
-        ${editBtn}<button class="btn quiet small" data-act="drop" data-id="${t.id}">Drop</button>`;
+        <button class="btn quiet small" data-act="steps-open" data-id="${t.id}">+ Step</button>${editBtn}<button class="btn quiet small" data-act="drop" data-id="${t.id}">Drop</button>`;
     }
     const dropping = state.ui.dropping === t.id ? `<div class="drop-box">
         <input type="text" id="drop-reason" placeholder="Why are you dropping this?" aria-label="Reason for dropping" maxlength="160">
@@ -538,11 +541,52 @@
     const checkable = d.locked && !t.dropped && !d.review.closed;
     return `<li class="task ${t.done ? 'is-done' : ''} ${t.dropped ? 'is-dropped' : ''}">
       ${d.locked ? `<button class="check" ${checkable ? `data-act="toggle" data-id="${t.id}"` : 'disabled'} aria-pressed="${!!t.done}" aria-label="${t.done ? 'Mark not done' : 'Mark done'}">${CHECK}</button>` : '<span class="step" aria-hidden="true">•</span>'}
-      <div class="t-body"><div class="t-text">${esc(t.text)}</div><div class="t-meta">${meta.join('')}</div></div>
+      <div class="t-body"><div class="t-text">${esc(t.text)}</div><div class="t-meta">${meta.join('')}</div>${stepsList(t, stepsEditable)}${state.ui.stepsFor === t.id && stepsEditable ? stepForm(t) : ''}</div>
       <div class="t-actions">${actions}</div>
       ${dropping}${editing}
     </li>`;
   }
+
+  // Steps: one level of checklist items under a task. They show progress but don't count as commitments.
+  function stepsList(t, editable) {
+    const steps = t.steps || []; if (!steps.length) return '';
+    const done = steps.filter(x => x.done).length;
+    return `<div class="step-bar" role="img" aria-label="${done} of ${steps.length} steps done"><span style="width:${(done / steps.length * 100).toFixed(1)}%"></span></div>
+      <ul class="steps">${steps.map(st => `<li class="${st.done ? 'done' : ''}">
+        <button class="step-check" data-act="step-toggle" data-id="${t.id}" data-step="${st.id}" aria-pressed="${!!st.done}" aria-label="${st.done ? 'Mark step not done' : 'Mark step done'}" ${editable ? '' : 'disabled'}>${st.done ? '✓' : ''}</button>
+        <span class="step-text">${esc(st.text)}</span>
+        ${editable ? `<button class="step-del" data-act="step-del" data-id="${t.id}" data-step="${st.id}" aria-label="Delete step">×</button>` : ''}</li>`).join('')}</ul>`;
+  }
+  function stepForm(t) {
+    return `<form class="mini-form step-form" data-form="step" data-task="${t.id}">
+      <input type="text" id="st-${t.id}" maxlength="120" autocomplete="off" placeholder="${(t.steps || []).length ? 'Next step' : 'First step, e.g. Outline'}" aria-label="New step">
+      <button class="btn small" type="submit">Add</button><button class="btn quiet small" type="button" data-act="steps-close">Done</button></form>`;
+  }
+  function toggleStep(taskId, stepId, forceDone) {
+    const k = todayKey();
+    mutateDay(k, d => { const t = d.tasks.find(x => x.id === taskId), st = t && (t.steps || []).find(x => x.id === stepId); if (st) st.done = forceDone === undefined ? !st.done : forceDone; });
+    if (focusOpen) { renderFocus(); tick(); }
+    const d = getDay(k), t = d.tasks.find(x => x.id === taskId);
+    if (forceDone === undefined && t && !t.done && d.locked && !d.review.closed && (t.steps || []).length && t.steps.every(x => x.done))
+      toast(`All steps done for “${t.text}”.`, { label: 'Mark task done', fn: () => markTaskDone(taskId) });
+  }
+  function markTaskDone(taskId) {
+    const k = todayKey(), t = getDay(k).tasks.find(x => x.id === taskId); if (!t || t.done) return;
+    mutateDay(k, d => { const x = d.tasks.find(y => y.id === taskId); if (x) x.done = true; });
+    if (t.backlogId) setBacklogDone(t.backlogId, true);
+    if (focusOpen) { renderFocus(); tick(); }
+    toast(goalAchieved() ? '★ All commitments done. Goal achieved!' : 'Task done.');
+  }
+  document.addEventListener('click', e => {
+    const b = e.target.closest('[data-act]'); if (!b) return;
+    const id = b.dataset.id;
+    switch (b.dataset.act) {
+      case 'steps-open': state.ui.stepsFor = id; render(); setTimeout(() => document.getElementById('st-' + id)?.focus(), 0); break;
+      case 'steps-close': state.ui.stepsFor = null; render(); break;
+      case 'step-toggle': toggleStep(id, b.dataset.step); break;
+      case 'step-del': mutateDay(todayKey(), d => { const t = d.tasks.find(x => x.id === id); if (t) t.steps = (t.steps || []).filter(x => x.id !== b.dataset.step); }); if (focusOpen) renderFocus(); break;
+    }
+  });
 
   function logLine(l) {
     const p = projectOf(l.project);
@@ -731,7 +775,7 @@
     let prevMonth = null;
     for (let w = 0; w < 12; w++) {
       const m = parse(addDays(start, w * 7)).getMonth();
-      cells += `<span class="mon">${m !== prevMonth ? parse(addDays(start, w * 7)).toLocaleDateString(undefined, { month: 'short' }) : ''}</span>`;
+      cells += `<span class="mon">${m !== prevMonth ? parse(addDays(start, w * 7)).toLocaleDateString('en-US', { month: 'short' }) : ''}</span>`;
       prevMonth = m;
     }
     const dayNames = ['Mon', '', 'Wed', '', 'Fri', '', 'Sun'];
@@ -863,7 +907,7 @@
           <span class="due ${f.late ? 'late' : ''}">${p.deadline ? f.due : '<span class="chip">Ongoing</span>'}</span>
           <div class="facts"><span>${f.lastDay ? (f.idle === 0 ? 'Worked on today' : `Last worked ${f.idle} day${f.idle === 1 ? '' : 's'} ago`) : 'Not started'}</span>
             ${f.idle != null && f.idle >= 5 && !f.late ? '<span class="chip warn">Going stale</span>' : ''}
-            ${p.deadline ? `<span class="muted">Due ${esc(parse(p.deadline).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }))}</span>` : ''}
+            ${p.deadline ? `<span class="muted">Due ${esc(parse(p.deadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }))}</span>` : ''}
             <span style="margin-left:auto">${state.ui.confirmDel === p.id
               ? `<button class="btn small" data-act="del-project" data-id="${p.id}">Yes, remove it and its open list (past days are kept)</button> <button class="btn quiet small" data-act="cancel-del">Keep</button>`
               : `<button class="btn quiet small" data-act="edit-proj" data-id="${p.id}">Edit</button><button class="btn quiet small" data-act="ask-del" data-id="${p.id}">Remove</button>`}</span>
@@ -909,6 +953,13 @@
     const f = e.target.closest('form[data-form]'); if (!f) return;
     e.preventDefault();
     const k = todayKey();
+    if (f.dataset.form === 'step') {
+      const tid = f.dataset.task, input = document.getElementById('st-' + tid), text = (input?.value || '').trim();
+      if (!text) { toast('Write the step first.'); return; }
+      mutateDay(k, d => { const t = d.tasks.find(x => x.id === tid); if (t) t.steps = [...(t.steps || []), { id: rid(), text, done: false }]; });
+      setTimeout(() => document.getElementById('st-' + tid)?.focus(), 0);
+      return;
+    }
     if (f.dataset.form === 'project') {
       const name = document.getElementById('proj-name').value.trim();
       if (!name) { toast('Give the project a name first.'); return; }
@@ -1014,7 +1065,7 @@
       case 'unrest': mutateDay(k, d => { d.rest = false; }); break;
       case 'carry': {
         const t = prev && prev.tasks.find(x => x.id === id); if (!t) break;
-        mutateDay(k, d => d.tasks.push({ id: rid(), text: t.text, project: t.project || null, category: t.category || null, backlogId: t.backlogId || null, est: t.est || 50, done: false, dropped: false, reason: '', late: false, minutes: 0, carried: true }));
+        mutateDay(k, d => d.tasks.push({ id: rid(), text: t.text, project: t.project || null, category: t.category || null, backlogId: t.backlogId || null, est: t.est || 50, done: false, dropped: false, reason: '', late: false, minutes: 0, carried: true, steps: (t.steps || []).filter(x => !x.done).map(x => ({ id: rid(), text: x.text, done: false })) }));
         break;
       }
       case 'carry-tom': if (prev?.review?.tomorrow) mutateDay(k, d => d.tasks.push({ id: rid(), text: prev.review.tomorrow, project: null, est: 50, done: false, dropped: false, reason: '', late: false, minutes: 0, carried: true })); break;
@@ -1222,6 +1273,8 @@
         ${open.map(b => `<label class="f-check"><input type="checkbox" data-wr-ms="${b.id}"><span>${esc(b.text)}</span></label>`).join('')}</div>` : ''}
       <label class="f-field"><span class="f-small">${metric === 'other' ? 'What did you complete?' : 'Note (optional)'}</span>
         <input type="text" id="wr-note" maxlength="200" autocomplete="off" placeholder="${metric === 'other' ? 'e.g. Modeled the roof trusses' : metric === 'words' ? 'e.g. Finished the methods draft' : 'e.g. 5 km run, felt strong'}"></label>
+      ${t && (t.steps || []).some(x => !x.done) ? `<div class="f-field"><span class="f-small">Steps finished</span>
+        ${t.steps.filter(x => !x.done).map(st => `<label class="f-check"><input type="checkbox" data-wr-step="${st.id}"><span>${esc(st.text)}</span></label>`).join('')}</div>` : ''}
       <label class="f-check"><input type="checkbox" id="wr-done" ${wrapUp && wrapUp.done ? 'checked' : ''}><span><b>This task is finished</b></span></label>
       <div class="f-row"><button class="f-btn" data-act="wrap-back">Back to timer</button><button class="f-btn" data-act="wrap-skip">Just stop</button><button class="f-btn solid" data-act="wrap-save">Save and stop</button></div>
     </div>`;
@@ -1230,11 +1283,12 @@
     if (!timer) return;
     const day = timer.day, tid = timer.taskId, t = timerTask(), p = t && t.project ? projectOf(t.project) : null;
     const m = Math.round((Date.now() - timer.start) / 60000);
-    let words = 0, note = '', ms = [], done = false;
+    let words = 0, note = '', ms = [], done = false, stepIds = [];
     if (!skip) {
       words = Math.max(0, Math.round(Number(document.getElementById('wr-words')?.value) || 0));
       note = (document.getElementById('wr-note')?.value || '').trim();
       ms = [...document.querySelectorAll('[data-wr-ms]:checked')].map(x => x.dataset.wrMs);
+      stepIds = [...document.querySelectorAll('[data-wr-step]:checked')].map(x => x.dataset.wrStep);
       done = !!document.getElementById('wr-done')?.checked;
     }
     wrapUp = null;
@@ -1244,14 +1298,16 @@
     if (words > 0) entries.push({ id: rid(), project: p ? p.id : null, taskId: tid, kind: 'words', value: words, note, at });
     else if (note) entries.push({ id: rid(), project: p ? p.id : null, taskId: tid, kind: 'note', value: null, note, at });
     const closed = getDay(day).review.closed;
-    if (entries.length || (done && !closed)) mutateDay(day, d => {
+    if (entries.length || stepIds.length || (done && !closed)) mutateDay(day, d => {
       d.logs = (d.logs || []).concat(entries);
+      const tk = d.tasks.find(y => y.id === tid); if (tk) (tk.steps || []).forEach(st => { if (stepIds.includes(st.id)) st.done = true; });
       if (done && !d.review.closed) { const x = d.tasks.find(y => y.id === tid); if (x) x.done = true; }
     });
     ms.forEach(id => setBacklogDone(id, true));
     if (done && !closed && t && t.backlogId) setBacklogDone(t.backlogId, true);
     const parts = [m >= 1 ? `Logged ${mins(m)}` : 'Under a minute, no time logged'];
     if (words) parts.push(`${nf(words)} words`);
+    if (stepIds.length) parts.push(`${stepIds.length} step${stepIds.length === 1 ? '' : 's'}`);
     if (ms.length) parts.push(`${ms.length} milestone${ms.length === 1 ? '' : 's'}`);
     if (note && !words) parts.push('note saved');
     if (done && !closed) parts.push('task done');
@@ -1314,7 +1370,9 @@
       const key = k + ':' + over.id;
       if (!nudged[key]) { nudged[key] = true; toast(`${catName(over.id)} has passed ${lim}% of today’s time.`); }
     } else n.hidden = true;
-    const ms = document.getElementById('miner-state'); if (ms) ms.textContent = timer ? 'Mining…' : 'Zzz… idle';
+    const ms = document.getElementById('miner-state');
+    if (ms) { const mode = minerMode(); ms.textContent = mode === 'mine' ? 'Mining…' : mode === 'win' ? '★ Goal achieved!' : 'Zzz… idle'; ms.classList.toggle('win', mode === 'win'); }
+    if (goalAchieved() && !nudged['win:' + todayKey()]) { nudged['win:' + todayKey()] = true; if (state.ready && state.view === 'today') toast('All of today’s commitments are done. Goal achieved!'); }
     updateActiveProject();
   }
 
@@ -1391,26 +1449,28 @@
     shirt: '#2f6f9f', shirtSh: '#245a82', strap: '#7a4a22', belt: '#4a3018', buckle: '#e0b020',
     pants: '#3a3a46', pantsSh: '#2a2a34', boot: '#2a2016', sole: '#120e09', glove: '#6b4423',
     handle: '#8a5a2b', handleHi: '#a8743c', metal: '#b9bec6', metalSh: '#7c8290',
-    rock: '#77736c', rockHi: '#a39f96', rockSh: '#5a5751', crack: '#43403b', ore: '#e0b020', oreHi: '#ffe066', spark: '#ffe066', z: '#8d8c87'
+    rock: '#77736c', rockHi: '#a39f96', rockSh: '#5a5751', crack: '#43403b', ore: '#e0b020', oreHi: '#ffe066', oreSh: '#b07f10', spark: '#ffe066', z: '#8d8c87'
   };
+  // Standing body: boots to helmet. d = how far the upper body dips (impact / hop).
+  function drawMinerBody(px, rect, d, lampOn) {
+    rect(9, 39, 7, 4, PX.boot); rect(9, 43, 8, 1, PX.sole); rect(19, 39, 7, 4, PX.boot); rect(19, 43, 8, 1, PX.sole);
+    rect(11, 30 + d, 4, 9 - d, PX.pants); rect(20, 30 + d, 4, 9 - d, PX.pants); rect(14, 30 + d, 1, 9 - d, PX.pantsSh); rect(23, 30 + d, 1, 9 - d, PX.pantsSh);
+    rect(11, 28 + d, 13, 3, PX.pants);
+    rect(10, 27 + d, 15, 2, PX.belt); rect(16, 27 + d, 3, 2, PX.buckle);
+    rect(10, 17 + d, 15, 10, PX.shirt); rect(23, 17 + d, 2, 10, PX.shirtSh);
+    rect(12, 17 + d, 2, 10, PX.strap); rect(20, 17 + d, 2, 10, PX.strap);
+    rect(15, 15 + d, 5, 2, PX.skinSh);
+    rect(12, 7 + d, 11, 9, PX.skin); rect(12, 7 + d, 2, 9, PX.skinSh); rect(14, 10 + d, 2, 3, PX.skinSh);
+    rect(18, 9 + d, 3, 1, PX.brow); rect(19, 10 + d, 2, 2, PX.eye); rect(23, 11 + d, 1, 2, PX.skin); rect(18, 14 + d, 3, 1, PX.mouth);
+    rect(12, 2 + d, 10, 4, PX.helmet); rect(13, 1 + d, 8, 1, PX.helmet); rect(14, 2 + d, 4, 1, PX.helmetHi); rect(13, 3 + d, 1, 2, PX.helmetHi);
+    rect(10, 6 + d, 15, 2, PX.helmetSh);
+    rect(22, 3 + d, 2, 3, PX.lampRim); rect(24, 3 + d, 2, 3, lampOn ? PX.lamp : PX.lampOff);
+    if (lampOn) for (let k = 0; k < 12; k++) for (let y = Math.floor(3 - k / 3); y <= Math.ceil(5 + k / 3); y++) px(26 + k, y + d, PX.beam);
+  }
   // Standing miner. Arm and pickaxe are one piece rotating at the front shoulder (24, 19), drawn in front of the body for the whole swing.
   function drawDetailedMiner(px, rect, dip, angle, lampOn) {
     const d = dip;
-    const body = () => {
-      rect(9, 39, 7, 4, PX.boot); rect(9, 43, 8, 1, PX.sole); rect(19, 39, 7, 4, PX.boot); rect(19, 43, 8, 1, PX.sole);
-      rect(11, 30 + d, 4, 9 - d, PX.pants); rect(20, 30 + d, 4, 9 - d, PX.pants); rect(14, 30 + d, 1, 9 - d, PX.pantsSh); rect(23, 30 + d, 1, 9 - d, PX.pantsSh);
-      rect(11, 28 + d, 13, 3, PX.pants);
-      rect(10, 27 + d, 15, 2, PX.belt); rect(16, 27 + d, 3, 2, PX.buckle);
-      rect(10, 17 + d, 15, 10, PX.shirt); rect(23, 17 + d, 2, 10, PX.shirtSh);
-      rect(12, 17 + d, 2, 10, PX.strap); rect(20, 17 + d, 2, 10, PX.strap);
-      rect(15, 15 + d, 5, 2, PX.skinSh);
-      rect(12, 7 + d, 11, 9, PX.skin); rect(12, 7 + d, 2, 9, PX.skinSh); rect(14, 10 + d, 2, 3, PX.skinSh);
-      rect(18, 9 + d, 3, 1, PX.brow); rect(19, 10 + d, 2, 2, PX.eye); rect(23, 11 + d, 1, 2, PX.skin); rect(18, 14 + d, 3, 1, PX.mouth);
-      rect(12, 2 + d, 10, 4, PX.helmet); rect(13, 1 + d, 8, 1, PX.helmet); rect(14, 2 + d, 4, 1, PX.helmetHi); rect(13, 3 + d, 1, 2, PX.helmetHi);
-      rect(10, 6 + d, 15, 2, PX.helmetSh);
-      rect(22, 3 + d, 2, 3, PX.lampRim); rect(24, 3 + d, 2, 3, lampOn ? PX.lamp : PX.lampOff);
-      if (lampOn) for (let k = 0; k < 12; k++) for (let y = Math.floor(3 - k / 3); y <= Math.ceil(5 + k / 3); y++) px(26 + k, y + d, PX.beam);
-    };
+    const body = () => drawMinerBody(px, rect, d, lampOn);
     const tool = () => {
       const a = angle * Math.PI / 180, cx = Math.cos(a), cy = Math.sin(a), nx = -cy, ny = cx, sx = 24, sy = 19 + d, ARM = 7, HANDLE = 10;
       const thick = (x, y, w, c) => { for (let o = -(w - 1) / 2; o <= (w - 1) / 2 + 0.01; o += 1) px(x + nx * o, y + ny * o, c); };
@@ -1432,6 +1492,21 @@
     rect(39, 34, 2, 2, PX.ore); px(39, 34, PX.oreHi); rect(43, 31, 2, 1, PX.ore); rect(37, 39, 2, 2, PX.ore); px(42, 38, PX.ore);
     px(41, 33, PX.crack); px(42, 34, PX.crack); px(42, 35, PX.crack); px(43, 36, PX.crack);
   }
+  // Goal achieved: he hops and spins (faces right, then left) holding a gold nugget overhead, with sparkles.
+  function drawCelebratingMiner(px, rect, fr) {
+    const f = fr % 8, hop = [0, -1, -1, 0, 0, -1, -1, 0][f], flip = f >= 4;
+    const P = (x, y, c) => px(flip ? 34 - x : x, y + hop, c);
+    const R = (x, y, w, h, c) => { for (let i = 0; i < w; i++) for (let j = 0; j < h; j++) P(x + i, y + j, c); };
+    drawMinerBody(P, R, 0, false);
+    R(19, 10, 2, 2, PX.skin); P(19, 11, PX.eye); P(20, 10, PX.eye);                   // happy squint
+    R(18, 14, 3, 1, PX.skin); R(18, 15, 3, 1, PX.mouth); P(17, 14, PX.mouth); P(21, 14, PX.mouth); // grin
+    const a = -60 * Math.PI / 180, cx = Math.cos(a), cy = Math.sin(a), nx = -cy, ny = cx, sx = 24, sy = 19;
+    for (let i = 0; i <= 7; i += 0.5) for (let o = -1; o <= 1; o++) P(sx + cx * i + nx * o, sy + cy * i + ny * o, i < 3 ? PX.shirt : PX.skin);
+    for (let i = 6; i <= 8; i += 0.5) for (let o = -1; o <= 1; o++) P(sx + cx * i + nx * o, sy + cy * i + ny * o, PX.glove);
+    R(27, 6, 5, 5, PX.ore); R(26, 7, 7, 3, PX.ore); R(27, 6, 2, 1, PX.oreHi); P(26, 7, PX.oreHi); R(30, 9, 2, 1, PX.oreSh); P(29, 10, PX.oreSh); // nugget above the glove
+    const tw = [[27, 2], [33, 5], [33, 13], [24, 9]];
+    tw.forEach(([x, y], i) => { if ((f + i) % 2) { P(x, y - 1, PX.spark); R(x - 1, y, 3, 1, PX.spark); P(x, y + 1, PX.spark); } else P(x, y, PX.oreHi); });
+  }
   function drawSleepingMiner(px, rect, breath, fr) {
     const b = breath;
     rect(3, 42, 22, 1, PX.handle); rect(24, 38, 2, 5, PX.metal); px(24, 38, PX.metalSh); px(25, 42, PX.metalSh);
@@ -1448,12 +1523,13 @@
     if (t >= 3) z(30 + (t - 3), 2, PX.z);
   }
   // SPRITE-END
-  function drawMiner(cv, mining, fr) {
+  function drawMiner(cv, mode, fr) {
     const g = cv.getContext('2d');
     g.clearRect(0, 0, cv.width, cv.height);
     const { px, rect } = minerPainter(g, 2);
     drawRock(px, rect);
-    if (mining) {
+    if (mode === 'win') drawCelebratingMiner(px, rect, fr);
+    else if (mode === 'mine') {
       const swing = [-80, -70, -55, -30, 0, 16, 16, -45];
       const f = fr % swing.length, hit = f === 5 || f === 6;
       drawDetailedMiner(px, rect, hit ? 1 : 0, swing[f], true);
@@ -1480,17 +1556,23 @@
       link.type = 'image/png'; link.removeAttribute('sizes'); link.href = c.toDataURL('image/png');
     } catch (e) {}
   })();
+  // Every commitment for today is checked off (and nothing is running).
+  function goalAchieved() {
+    const d = getDay(todayKey()), s = stats(d);
+    return !d.rest && d.locked && s.committed > 0 && s.done === s.committed;
+  }
+  const minerMode = () => timer ? 'mine' : goalAchieved() ? 'win' : 'sleep';
   function minerLoop(ts) {
     const cv = document.getElementById('miner');
     if (!cv || document.hidden || focusOpen) { minerRAF = null; return; }
-    const mining = !!timer;
-    if (ts - minerLast > 1000 / (mining ? 8 : 3)) { minerLast = ts; minerFrame++; drawMiner(cv, mining, minerFrame); }
+    const mode = minerMode();
+    if (ts - minerLast > 1000 / (mode === 'mine' ? 8 : mode === 'win' ? 6 : 3)) { minerLast = ts; minerFrame++; drawMiner(cv, mode, minerFrame); }
     minerRAF = requestAnimationFrame(minerLoop);
   }
   function startMiner() {
     const cv = document.getElementById('miner'); if (!cv) return;
-    if (matchMedia('(prefers-reduced-motion: reduce)').matches) { drawMiner(cv, !!timer, 0); return; }
-    drawMiner(cv, !!timer, minerFrame);
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) { drawMiner(cv, minerMode(), 0); return; }
+    drawMiner(cv, minerMode(), minerFrame);
     if (!minerRAF) minerRAF = requestAnimationFrame(minerLoop);
   }
   document.addEventListener('visibilitychange', () => { if (!document.hidden) startMiner(); });
@@ -1635,7 +1717,7 @@
       <p class="muted small">Your ledger is stored only on this device: <span class="num">${nDays}</span> days, <span class="num">${nProj}</span> projects, <span class="num">${nTasks}</span> listed tasks. Export a backup file every week or so and keep it in iCloud Drive or Files. Safari and the Home Screen app keep separate data, so use the Home Screen app day to day.</p>
       <div class="row"><button class="btn primary" data-act="export">Export data (JSON)</button><button class="btn" data-act="copy-backup">Copy as text</button>
         <label class="btn" for="import-file">Import data (JSON)</label><input type="file" id="import-file" accept="application/json,.json" hidden></div>`;
-    if (pi) h += `<div class="pedit"><span>Replace everything on this device with the backup from <b>${esc(pi.exportedAt ? new Date(pi.exportedAt).toLocaleString() : 'an unknown date')}</b> (${Object.keys(pi.days).length} days, ${(pi.profile.projects || []).filter(p => !p.archived).length} projects)?</span>
+    if (pi) h += `<div class="pedit"><span>Replace everything on this device with the backup from <b>${esc(pi.exportedAt ? new Date(pi.exportedAt).toLocaleString('en-US') : 'an unknown date')}</b> (${Object.keys(pi.days).length} days, ${(pi.profile.projects || []).filter(p => !p.archived).length} projects)?</span>
         <button class="btn small primary" data-act="import-confirm">Replace my data</button><button class="btn quiet small" data-act="import-cancel">Cancel</button></div>`;
     h += '</section>';
 
@@ -1700,7 +1782,7 @@
     setTimeout(() => {
       if (snapshot() === snap) return;
       let label = 'Change saved.';
-      if (act === 'toggle') { const t = getDay(todayKey()).tasks.find(x => x.id === id); label = t && t.done ? 'Marked done.' : 'Marked not done.'; }
+      if (act === 'toggle') { const t = getDay(todayKey()).tasks.find(x => x.id === id); label = t && t.done ? (goalAchieved() ? '★ All commitments done. Goal achieved!' : 'Marked done.') : 'Marked not done.'; }
       else if (act === 'btoggle') { const x = backlog().find(y => y.id === id); label = x && x.done ? 'Marked done.' : 'Marked not done.'; }
       else label = { 'confirm-drop': 'Task dropped.', remove: 'Task removed.', bremove: 'Task deleted.', 'del-project': 'Project removed.', 'del-log': 'Entry removed.' }[act];
       toast(label, { label: 'Undo', fn: () => { const v = JSON.parse(snap); state.days = v.days; state.profile = v.profile; Store.save(); render(); toast('Undone.'); } });
@@ -1747,7 +1829,7 @@
   function route() {
     const h = location.hash.replace('#', '');
     state.view = ['today', 'history', 'projects', 'settings'].includes(h) ? h : 'today';
-    state.ui.dropping = null; state.ui.confirmDel = null; state.ui.editProj = null; state.ui.editTask = null; state.ui.editB = null;
+    state.ui.dropping = null; state.ui.confirmDel = null; state.ui.editProj = null; state.ui.editTask = null; state.ui.editB = null; state.ui.stepsFor = null;
     render();
   }
   window.addEventListener('hashchange', route);
