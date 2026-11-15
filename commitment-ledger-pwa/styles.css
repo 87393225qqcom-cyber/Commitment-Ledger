@@ -514,15 +514,7 @@ button.cell:hover { outline: 2px solid var(--ink); outline-offset: 1px; }
 .break-card .break-time.done { color: var(--warn); }
 .break-extend { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: center; }
 
-/* ---- weekly review + focus insights ---- */
-.weeknav { display: flex; align-items: center; gap: 12px; }
-.weeknav .week-range { font-weight: 700; }
-.wk-days { list-style: none; margin: 0; padding: 0; }
-.wk-day { display: grid; grid-template-columns: 110px 1fr auto auto; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); font-size: 14px; }
-.wk-day:first-child { border-top: 0; }
-.wk-day.today { font-weight: 700; }
-.wk-day .num { text-align: right; font-variant-numeric: tabular-nums; }
-@media (max-width: 480px) { .wk-day { grid-template-columns: 92px 1fr auto auto; gap: 8px; } }
+/* ---- focus insights (weekday distribution) ---- */
 .wd-bars { display: flex; align-items: flex-end; gap: 8px; height: 96px; }
 .wd-bar { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 6px; height: 100%; font-size: 12px; }
 .wd-fill { display: block; width: 100%; max-width: 30px; min-height: 2px; background: var(--ink); border-radius: 2px 2px 0 0; }

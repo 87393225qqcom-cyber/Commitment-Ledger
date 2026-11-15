@@ -75,7 +75,7 @@
   }
   const CHECK = '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M2.5 7.5l3 3 6-7" fill="none" stroke="var(--accent-ink)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
-  const state = { days: {}, profile: { projects: [] }, ready: false, view: 'today', ui: { dropping: null, confirmDel: null, reviewWeek: null }, note: '', settings: {} };
+  const state = { days: {}, profile: { projects: [] }, ready: false, view: 'today', ui: { dropping: null, confirmDel: null }, note: '', settings: {} };
 
   // ---------- dates ----------
   const pad = n => String(n).padStart(2, '0');
@@ -151,25 +151,6 @@
     (d.logs || []).forEach(l => { if (l.kind === 'time') m += l.value || 0; });
     return m;
   }
-  function catFocusRange(start, days) {
-    const out = { passion: 0, must: 0, baseline: 0, none: 0 };
-    for (let i = 0; i < days; i++) {
-      const d = state.days[addDays(start, i)]; if (!d) continue;
-      (d.tasks || []).forEach(t => { out[taskCat(t) || 'none'] += t.minutes || 0; });
-      (d.logs || []).forEach(l => { if (l.kind === 'time') { const p = projectOf(l.project); out[p ? projCat(p) : 'none'] += l.value || 0; } });
-    }
-    return out;
-  }
-  function projFocusRange(start, days) {
-    const out = {};
-    for (let i = 0; i < days; i++) {
-      const d = state.days[addDays(start, i)]; if (!d) continue;
-      (d.tasks || []).forEach(t => { if (t.project) out[t.project] = (out[t.project] || 0) + (t.minutes || 0); });
-      (d.logs || []).forEach(l => { if (l.kind === 'time' && l.project) out[l.project] = (out[l.project] || 0) + (l.value || 0); });
-    }
-    return out;
-  }
-  const weekDays = start => [0, 1, 2, 3, 4, 5, 6].map(i => addDays(start, i));
   const pct = r => r == null ? '—' : Math.round(r * 100) + '%';
 
   // ---------- storage (this device only: localStorage) ----------
@@ -501,7 +482,7 @@
   function applyStaticI18n() {
     const nav = document.getElementById('tabs');
     if (nav) nav.setAttribute('aria-label', _t('Views', '视图'));
-    const tabs = { today: _t('Today', '今天'), history: _t('History', '历史'), review: _t('Review', '回顾'), projects: _t('Projects', '项目'), settings: _t('Settings', '设置') };
+    const tabs = { today: _t('Today', '今天'), history: _t('History', '历史'), projects: _t('Projects', '项目'), settings: _t('Settings', '设置') };
     document.querySelectorAll('nav.tabs a').forEach(a => {
       const v = a.dataset.view; if (!v || !tabs[v]) return;
       const node = a.lastChild; if (node && node.nodeType === 3) node.textContent = tabs[v];
@@ -530,7 +511,7 @@
     const v = document.getElementById('view');
     syncAffirm();
     applyStaticI18n();
-    v.innerHTML = state.view === 'history' ? viewHistory() : state.view === 'review' ? viewReview() : state.view === 'projects' ? viewProjects() : state.view === 'settings' ? viewSettings() : viewToday();
+    v.innerHTML = state.view === 'history' ? viewHistory() : state.view === 'projects' ? viewProjects() : state.view === 'settings' ? viewSettings() : viewToday();
     tick();
     updateBalance(); startMiner();
 
@@ -783,6 +764,14 @@
         <div class="stat"><span class="label">${_t('Days closed', '已结束天数')}</span><b>${cur.closed}</b><span class="delta">${_t('last week {a}', '上周 {a}', { a: last.closed })}</span></div>
       </div></section>`;
 
+    // weekly note (current week)
+    {
+      const wkNotes = state.settings.weeklyNotes || {};
+      h += `<section class="card"><div class="sec-head"><h2>${_t('Weekly note', '本周总结')}</h2></div>
+        <div class="field"><textarea id="weekly-note" maxlength="2000" rows="2" placeholder="${_t('What went well, what to change, what to carry into next week.', '哪些顺利、要改什么、下周要带着什么继续。')}">${esc(wkNotes[ws] || '')}</textarea>
+        <span class="muted small">${_t('Saved automatically on this device.', '自动保存在本设备上。')}</span></div></section>`;
+    }
+
     // progress by tracking type
     {
       const ps = activeProjects();
@@ -834,6 +823,31 @@
           <span class="muted" style="font-size:12px;margin-top:-6px">${_t('{a} task{s} done', '{a} 项任务完成', { a: bal[c.id].n, s: bal[c.id].n === 1 ? '' : 's' })}</span>`).join('')}</div>
         ${bal.passion.m === 0 && (bal.must.m + bal.baseline.m) > 0 ? `<p class="muted" style="font-size:13px">${_t('No focused time on passion-driven work in two weeks.', '两周内没有投入时间给热爱驱动的工作。')}</p>` : ''}`
       : `<p class="muted">${_t('Tag today’s tasks with a category or project and the time you focus will add up here.', '给今天的任务标上分类或项目，你的专注时间就会汇总到这里。')}</p>`}</section>`;
+
+    // focus insights
+    {
+      let best = null, focusDays = 0, focusSum = 0;
+      for (let i = 0; i < 7; i++) {
+        const k = addDays(ws, i); if (k > today) break;
+        const f = dayFocus(k);
+        if (f > 0) { focusDays++; focusSum += f; if (!best || f > best.f) best = { k, f }; }
+      }
+      const bestDay = best ? parse(best.k).toLocaleDateString(LOC(), { weekday: 'short' }) : '';
+      const bestDate = best ? parse(best.k).toLocaleDateString(LOC(), { month: 'short', day: 'numeric' }) : '';
+      const wd = new Array(7).fill(0);
+      const start8 = addDays(ws, -7 * 7);
+      for (let i = 0; i < 56; i++) { const k = addDays(start8, i); if (k > today) break; wd[(parse(k).getDay() + 6) % 7] += dayFocus(k); }
+      const wdMax = Math.max(1, ...wd);
+      const wdLabel = [_t('Mon', '一'), _t('Tue', '二'), _t('Wed', '三'), _t('Thu', '四'), _t('Fri', '五'), _t('Sat', '六'), _t('Sun', '日')];
+      const wdBars = wd.map((v, i) => `<div class="wd-bar"><span class="wd-fill" style="height:${Math.max(4, v / wdMax * 100)}%"></span><span class="muted">${wdLabel[i]}</span></div>`).join('');
+      h += `<section class="card"><div class="sec-head"><h2>${_t('Focus insights', '专注洞察')}</h2><span class="muted">${_t('This week', '本周')}</span></div>
+        <div class="stats">
+          <div class="stat"><span class="label">${_t('Most focused day', '最专注的一天')}</span><b>${esc(bestDay || '—')}</b><span class="delta">${best ? `${bestDate} · ${mins(best.f)}` : ''}</span></div>
+          <div class="stat"><span class="label">${_t('Average per active day', '平均每天（有专注）')}</span><b>${focusDays ? mins(Math.round(focusSum / focusDays)) : '—'}</b><span class="delta">${_t('{a} focus day{s}', '{a} 天有专注', { a: focusDays, s: focusDays === 1 ? '' : 's' })}</span></div>
+        </div>
+        <div class="field"><span class="label">${_t('Focus by weekday, last 8 weeks', '最近 8 周按星期几的专注')}</span><div class="wd-bars">${wdBars}</div></div>
+        ${!focusSum ? `<p class="muted small">${_t('Start the timer on a task and your focus patterns will show up here.', '在任务上启动计时器，你的专注规律就会显示在这里。')}</p>` : ''}</section>`;
+    }
 
     // heatmap
     const start = addDays(ws, -77);
@@ -892,83 +906,6 @@
       </div></li>`;
     }).join('')}</ul>`;
     h += '</section>';
-    return h;
-  }
-
-  // ---------- weekly review + focus insights ----------
-  function viewReview() {
-    const today = todayKey();
-    const week = state.ui.reviewWeek || weekStart(today);
-    const days = weekDays(week);
-    const isCurrent = week === weekStart(today);
-    const wk = weekStats(week);
-    const focus = days.reduce((a, k) => a + dayFocus(k), 0);
-    const lastFocus = weekDays(addDays(week, -7)).reduce((a, k) => a + dayFocus(k), 0);
-    const words = days.reduce((a, k) => { const d = state.days[k]; return a + (d ? (d.logs || []).filter(l => l.kind === 'words').reduce((x, l) => x + (l.value || 0), 0) : 0); }, 0);
-    const msDone = days.reduce((a, k) => a + backlog().filter(b => b.done && b.doneAt && dayKeyOf(b.doneAt) === k).length, 0);
-    const ratings = days.filter(k => state.days[k]?.review?.rating).map(k => state.days[k].review.rating);
-    const avgRating = ratings.length ? (ratings.reduce((a, b) => a + b, 0) / ratings.length).toFixed(1) : null;
-    const blocked = {};
-    days.forEach(k => (state.days[k]?.review?.blockers || []).forEach(b => blocked[b] = (blocked[b] || 0) + 1));
-    const blockers = Object.entries(blocked).sort((a, b) => b[1] - a[1]);
-    const cat = catFocusRange(week, 7);
-    const catMax = Math.max(1, cat.passion, cat.must, cat.baseline);
-    const range = `${shortDate(week)} – ${shortDate(addDays(week, 6))}`;
-
-    let h = `<section class="card"><div class="sec-head"><h2>${_t('Weekly review', '每周回顾')}</h2><span class="chip${isCurrent ? ' on' : ''}">${isCurrent ? _t('This week', '本周') : shortDate(week)}</span></div>
-      <div class="weeknav"><button class="btn small" data-act="week-prev" aria-label="${_t('Previous week', '上一周')}">←</button><span class="num week-range">${range}</span><button class="btn small" data-act="week-next" aria-label="${_t('Next week', '下一周')}" ${isCurrent ? 'disabled' : ''}>→</button></div>
-      <div class="stats">
-        <div class="stat"><span class="label">${_t('Kept', '守诺')}</span><b>${pct(wk.rate)}</b><span class="delta">${_t('{a}/{b} commitments', '{a}/{b} 项承诺', { a: wk.done, b: wk.committed })}</span></div>
-        <div class="stat"><span class="label">${_t('Focus', '专注')}</span><b>${mins(focus)}</b><span class="delta">${_t('last week {a}', '上周 {a}', { a: mins(lastFocus) })}</span></div>
-        <div class="stat"><span class="label">${_t('Words', '字数')}</span><b>${nf(words)}</b><span class="delta">${_t('{a} milestones', '{a} 个里程碑', { a: msDone })}</span></div>
-        <div class="stat"><span class="label">${_t('Mood', '心情')}</span><b>${avgRating ?? '—'}</b><span class="delta">${_t('avg rating · {a} days closed', '平均评分 · 结束 {a} 天', { a: wk.closed })}</span></div>
-      </div></section>`;
-
-    // day by day
-    const dayList = days.filter(k => k <= today && state.days[k]).map(k => {
-      const d = state.days[k], s = stats(d), f = dayFocus(k);
-      return `<li class="wk-day${k === today ? ' today' : ''}"><span class="num">${esc(shortDate(k))}</span>
-        ${d.rest ? `<span class="muted">${_t('Rest day', '休息日')}</span>` : `<span>${s.committed ? `${s.done}/${s.committed}` : '—'}</span>`}
-        <span class="num">${f ? mins(f) : '—'}</span>
-        <span class="muted">${d.review?.rating ? `${d.review.rating}/5` : ''}</span></li>`;
-    }).join('');
-    const hasDays = days.some(k => k <= today && state.days[k]);
-    h += `<section class="card"><div class="sec-head"><h2>${_t('Day by day', '逐日')}</h2></div>
-      ${hasDays ? `<ul class="wk-days">${dayList}</ul>` : `<p class="muted">${_t('No days recorded this week yet.', '本周还没有记录任何一天。')}</p>`}</section>`;
-
-    // balance
-    h += `<section class="card"><div class="sec-head"><h2>${_t('Balance', '平衡')}</h2><span class="muted">${_t('This week', '本周')}</span></div>
-      <div class="cat-sum">${CATS.map(c => `<div class="bar cat-${c.id}"><span class="cat-label"><span class="cat-dot"></span>${esc(catName(c.id))}</span><span class="track"><span style="width:${cat[c.id] / catMax * 100}%"></span></span><span class="num">${mins(cat[c.id])}</span></div>`).join('')}</div>
-      ${cat.passion === 0 && (cat.must + cat.baseline) > 0 ? `<p class="muted small">${_t('No time on passion-driven work this week.', '本周没有投入时间给热爱驱动的工作。')}</p>` : ''}</section>`;
-
-    // focus insights
-    const wd = new Array(7).fill(0);
-    const start8 = addDays(week, -7 * 7);
-    for (let i = 0; i < 56; i++) { const k = addDays(start8, i); if (k > today) break; wd[(parse(k).getDay() + 6) % 7] += dayFocus(k); }
-    const wdMax = Math.max(1, ...wd);
-    const wdLabel = [_t('Mon', '一'), _t('Tue', '二'), _t('Wed', '三'), _t('Thu', '四'), _t('Fri', '五'), _t('Sat', '六'), _t('Sun', '日')];
-    const wdBars = wd.map((v, i) => `<div class="wd-bar"><span class="wd-fill" style="height:${Math.max(4, v / wdMax * 100)}%"></span><span class="muted">${wdLabel[i]}</span></div>`).join('');
-    let best = null;
-    days.forEach(k => { const f = dayFocus(k); if (k <= today && f > 0 && (!best || f > best.f)) best = { k, f }; });
-    const pf = projFocusRange(week, 7);
-    const top = Object.entries(pf).filter(([id, v]) => v > 0 && projectOf(id)).sort((a, b) => b[1] - a[1]).slice(0, 5);
-    const topList = top.length ? `<ul class="plist">${top.map(([id, v]) => `<li><span>${esc(projectOf(id).name)}</span><span class="num">${mins(v)}</span></li>`).join('')}</ul>` : '';
-    h += `<section class="card"><div class="sec-head"><h2>${_t('Focus insights', '专注洞察')}</h2><span class="muted">${_t('This week', '本周')}</span></div>
-      ${best ? `<p class="muted small">${_t('Most focused day: {a} — {b}.', '最专注的一天：{a} — {b}。', { a: shortDate(best.k), b: mins(best.f) })}</p>` : ''}
-      <div class="field"><span class="label">${_t('Focus by weekday, last 8 weeks', '最近 8 周按星期几的专注')}</span><div class="wd-bars">${wdBars}</div></div>
-      ${topList ? `<div class="field"><span class="label">${_t('Top projects this week', '本周最投入的项目')}</span>${topList}</div>` : ''}
-      ${!focus ? `<p class="muted small">${_t('Start the timer on a task and your focus patterns will show up here.', '在任务上启动计时器，你的专注规律就会显示在这里。')}</p>` : ''}</section>`;
-
-    // blockers
-    h += `<section class="card"><div class="sec-head"><h2>${_t('What got in the way', '什么在阻碍你')}</h2></div>
-      ${blockers.length ? `<div class="bars">${blockers.map(([b, n]) => `<div class="bar"><span>${esc(blockerName(b))}</span><span class="track"><span style="width:${n / blockers[0][1] * 100}%"></span></span><span class="num">${n}</span></div>`).join('')}</div>` : `<p class="muted small">${_t('Blockers you tag when closing a day this week will add up here.', '本周结束一天时标记的阻碍会汇总到这里。')}</p>`}</section>`;
-
-    // weekly note
-    const notes = state.settings.weeklyNotes || {};
-    h += `<section class="card"><div class="sec-head"><h2>${_t('Weekly note', '本周总结')}</h2></div>
-      <div class="field"><textarea id="weekly-note" maxlength="2000" rows="3" placeholder="${_t('What went well, what to change, what to carry into next week.', '哪些顺利、要改什么、下周要带着什么继续。')}">${esc(notes[week] || '')}</textarea>
-      <span class="muted small">${_t('Saved automatically on this device.', '自动保存在本设备上。')}</span></div></section>`;
-
     return h;
   }
 
@@ -1852,7 +1789,7 @@
   // Weekly review note: saved per week (keyed by the Monday that starts it).
   document.addEventListener('input', e => {
     if (e.target.id !== 'weekly-note') return;
-    const week = state.ui.reviewWeek || weekStart(todayKey());
+    const week = weekStart(todayKey());
     const notes = Object.assign({}, state.settings.weeklyNotes || {});
     notes[week] = e.target.value;
     setSetting({ weeklyNotes: notes });
@@ -2017,8 +1954,6 @@
       case 'ask-erase': state.ui.confirmErase = true; render(); break;
       case 'cancel-erase': state.ui.confirmErase = false; render(); break;
       case 'erase': state.ui.confirmErase = false; if (timer) { timer = null; saveTimer(); } Store.apply({ days: {}, profile: { projects: [], backlog: [] }, settings: { lastBriefing: k } }); Store.flush(); render(); toast(_t('All data erased.', '所有数据已清除。')); break;
-      case 'week-prev': state.ui.reviewWeek = addDays(state.ui.reviewWeek || weekStart(todayKey()), -7); render(); break;
-      case 'week-next': { const w = state.ui.reviewWeek || weekStart(todayKey()); if (addDays(w, 7) <= weekStart(todayKey())) { state.ui.reviewWeek = addDays(w, 7); render(); } break; }
       case 'onboard-next': onboardPage = Math.min(ONBOARD_TOTAL - 1, onboardPage + 1); showModal(onboardingModal()); break;
       case 'onboard-prev': onboardPage = Math.max(0, onboardPage - 1); showModal(onboardingModal()); break;
       case 'onboard-skip': case 'onboard-done': onboardPage = 0; setSetting({ onboarded: true }); closeModal(); break;
@@ -2097,8 +2032,8 @@
   // ---------- routing ----------
   function route() {
     const h = location.hash.replace('#', '');
-    state.view = ['today', 'history', 'review', 'projects', 'settings'].includes(h) ? h : 'today';
-    state.ui.dropping = null; state.ui.confirmDel = null; state.ui.editProj = null; state.ui.editTask = null; state.ui.editB = null; state.ui.stepsFor = null; state.ui.reviewWeek = null;
+    state.view = ['today', 'history', 'projects', 'settings'].includes(h) ? h : 'today';
+    state.ui.dropping = null; state.ui.confirmDel = null; state.ui.editProj = null; state.ui.editTask = null; state.ui.editB = null; state.ui.stepsFor = null;
     render();
   }
   window.addEventListener('hashchange', route);
