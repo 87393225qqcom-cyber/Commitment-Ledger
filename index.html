@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Commitment Ledger</title>
+  <meta name="description" content="一个私密的每日自我承诺账本：承诺、专注、结束一天。">
+
+  <!-- Installable app (Android/desktop read the manifest; iOS reads the apple-* tags) -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Ledger">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <meta name="theme-color" content="#ebeae6" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#111110" media="(prefers-color-scheme: dark)">
+  <meta name="format-detection" content="telephone=no">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400&display=swap">
+  <!-- Chinese text: KingHwa_OldSong (京華老宋体), loaded in small pieces so only the characters shown are downloaded -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@chinese-fonts/jhlst@3.0.0/dist/%E4%BA%AC%E8%8F%AF%E8%80%81%E5%AE%8B%E4%BD%93v2_002/result.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="wrap">
+  <div id="affirm" class="affirm" hidden>
+    <label class="affirm-label" for="affirm-text"><span id="affirm-label">写给自己的话</span><span id="affirm-meta"></span></label>
+    <textarea id="affirm-text" rows="1" maxlength="160" spellcheck="false" placeholder="写下几句鼓励自己的话…"></textarea>
+  </div>
+  <header class="top">
+    <div>
+      <h1 class="visually-hidden">Commitment Ledger</h1>
+      <p class="date" id="today-date"></p>
+    </div>
+    <div class="pills" id="pills"></div>
+  </header>
+  <div id="install" class="install" hidden></div>
+  <nav class="tabs" id="tabs" aria-label="视图">
+    <a href="#today" data-view="today"><canvas class="tab-icon" width="72" height="72" aria-hidden="true"></canvas>今天</a>
+    <a href="#history" data-view="history">历史</a>
+    <a href="#projects" data-view="projects">项目</a>
+    <a href="#settings" data-view="settings">设置</a>
+  </nav>
+  <main id="view"><div class="card empty">正在打开你的账本…</div></main>
+  <footer id="note"></footer>
+</div>
+<div id="focus" class="focus" hidden role="dialog" aria-modal="true" aria-label="Focus timer"></div>
+<div id="modal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="modal-title"></div>
+<div id="toast" role="status" hidden></div>
+<script src="app.js"></script>
+</body>
+</html>

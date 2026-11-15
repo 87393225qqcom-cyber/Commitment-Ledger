@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Ledger Manual · 使用手册</title>
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400&display=swap">
+  <!-- Chinese text: KingHwa_OldSong (京華老宋体), loaded in small pieces so only the characters shown are downloaded -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@chinese-fonts/jhlst@3.0.0/dist/%E4%BA%AC%E8%8F%AF%E8%80%81%E5%AE%8B%E4%BD%93v2_002/result.css">
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .manual { max-width: 680px; }
+    .manual h1 { font-size: clamp(26px, 6vw, 34px); }
+    .manual h2 { font-size: 18px; }
+    .manual ol, .manual ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
+    .manual li { overflow-wrap: anywhere; }
+    .lang-switch { display: flex; gap: 6px; }
+    .zh { font-family: "Courier Prime", "American Typewriter", "Courier New", "KingHwa_OldSong", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei", var(--body); }
+    body.show-en .zh, body.show-zh .en { display: none; }
+    .back { color: var(--accent); font-weight: 600; text-decoration: none; }
+  </style>
+<script>
+  // Use the same day/night appearance as the app.
+  (function () {
+    try {
+      var st = (JSON.parse(localStorage.getItem('commitment-ledger.v1') || '{}').settings) || {}, a = st.appearance || 'time', th = null;
+      if (a === 'light' || a === 'dark') th = a;
+      else if (a === 'time') { var d = new Date(), h = d.getHours() + d.getMinutes() / 60, f = st.dayFrom == null ? 7 : st.dayFrom, n = st.nightFrom == null ? 19 : st.nightFrom; th = h >= f && h < n ? 'light' : 'dark'; }
+      if (th) document.documentElement.setAttribute('data-theme', th);
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body class="show-en">
+<div class="wrap manual">
+  <div class="row" style="justify-content:space-between">
+    <a class="back" href="./#settings"><span class="en">← Back to app</span><span class="zh">← 返回应用</span></a>
+    <div class="lang-switch" role="group" aria-label="Language">
+      <button class="choice" id="btn-zh" data-lang="zh" aria-pressed="false">中文</button>
+      <button class="choice" id="btn-en" data-lang="en" aria-pressed="true">English</button>
+    </div>
+  </div>
+
+  <header>
+    <h1><span class="en">Commitment Ledger: quick manual</span><span class="zh">承诺账本 · 简明手册</span></h1>
+    <p class="muted"><span class="en">Every day has three steps: Commit in the morning, Work, then Close the day.</span><span class="zh">每天三步：早上「承诺」，然后「工作」，晚上「结束今天」。</span></p>
+  </header>
+
+  <section class="card">
+    <h2><span class="en">1. Install on your phone</span><span class="zh">1. 安装到手机</span></h2>
+    <ul class="en">
+      <li><b>iPhone:</b> open the app link in <b>Safari</b> → <b>Share</b> → <b>Add to Home Screen</b>.</li>
+      <li><b>Android:</b> open it in <b>Chrome</b> → <b>⋮</b> → <b>Install app</b>.</li>
+      <li>Always open it from the Home Screen icon. Updates install themselves; to get one, close the app fully and reopen it.</li>
+    </ul>
+    <ul class="zh">
+      <li><b>iPhone：</b>用 <b>Safari</b> 打开应用链接 → <b>分享</b> → <b>添加到主屏幕</b>。</li>
+      <li><b>安卓：</b>用 <b>Chrome</b> 打开 → <b>⋮</b> → <b>安装应用</b>。</li>
+      <li>请始终从主屏幕图标打开。更新会自动生效，完全关闭应用再重新打开即可。</li>
+    </ul>
+  </section>
+
+  <section class="card">
+    <h2><span class="en">2. Projects and tasks</span><span class="zh">2. 项目与任务</span></h2>
+    <ul class="en">
+      <li><b>Projects</b> tab → name a project and pick a <b>category</b>: Passion-driven, Must-do or Baseline.</li>
+      <li>Choose <b>No deadline</b> or <b>Has a deadline</b>, and a <b>tracking type</b>: Word count (writing), Time (workouts, practice) or Other (milestones, e.g. 3D work).</li>
+      <li>Add tasks under each project. Tap <b>To today</b> to put one on today's list.</li>
+    </ul>
+    <ul class="zh">
+      <li>在 <b>Projects</b> 页新建项目，选择<b>类别</b>：热爱驱动、必须完成、日常基础。</li>
+      <li>选择<b>无截止日期</b>或<b>有截止日期</b>，以及<b>记录方式</b>：字数（写作）、时间（运动、练习）或其他（里程碑，如 3D 建模）。</li>
+      <li>在项目下添加任务，点 <b>To today</b> 加入今天的计划。</li>
+    </ul>
+  </section>
+
+  <section class="card">
+    <h2><span class="en">3. Today: commit, work, close</span><span class="zh">3. 今天：承诺、工作、结束</span></h2>
+    <ol class="en">
+      <li><b>Commit:</b> add 1–3 concrete outcomes, then <b>Lock in</b>. After that, tasks can be checked off or dropped with a reason, never quietly deleted.</li>
+      <li><b>Work:</b> press <b>Focus</b> on a task. Log untimed work (e.g. a workout) under <b>Log progress</b>.</li>
+      <li><b>Close the day:</b> rate the day, tag what got in the way, write the first task for tomorrow, then tap <b>Close the day</b>.</li>
+    </ol>
+    <ol class="zh">
+      <li><b>承诺：</b>写下 1–3 个具体成果，点 <b>Lock in</b> 锁定。锁定后任务只能完成或注明原因放弃，不能悄悄删除。</li>
+      <li><b>工作：</b>在任务上点 <b>Focus</b> 开始专注；未计时的工作（如运动）在 <b>Log progress</b> 中记录。</li>
+      <li><b>结束今天：</b>给今天打分、标记干扰因素、写下明天第一件事，然后点 <b>Close the day</b>。</li>
+    </ol>
+    <p class="small muted"><span class="en">Streak: a day counts when you close it having kept at least half your commitments. Rest days don't break it.</span><span class="zh">连续天数：结束当天且完成至少一半承诺即计入；休息日不会中断。</span></p>
+  </section>
+
+  <section class="card">
+    <h2><span class="en">4. Focus timer</span><span class="zh">4. 专注计时器</span></h2>
+    <ul class="en">
+      <li>Press <b>Focus</b> to open the full-screen timer. Pick a target: 15m, 25m, 50m or 1h 30m.</li>
+      <li>The outer ring fades away as time passes. The black dot marks now.</li>
+      <li>When time is up, a sound plays: choose <b>+10 min</b>, <b>Keep going</b> or <b>End session</b>. Change the sound in <b>Settings</b>.</li>
+      <li><b>End session</b> logs the time and lets you add words written, milestones finished or a note, and tick the task as finished, all in one step.</li>
+      <li>On iPhone, turn the ringer on and keep the app open on screen. If the screen still sleeps, set Auto-Lock to Never during focus.</li>
+    </ul>
+    <ul class="zh">
+      <li>点 <b>Focus</b> 打开全屏计时器，选择目标时长：15、25、50 分钟或 1.5 小时。</li>
+      <li>外圈刻度随时间逐渐消失，黑点表示当前时刻。</li>
+      <li>时间到会播放提示音，可选 <b>+10 min</b>、<b>Keep going</b>（继续）或 <b>End session</b>（结束）。提示音可在 <b>Settings</b> 中更换。</li>
+      <li><b>End session</b> 会自动记录时间，并可在同一步填写字数、完成的里程碑或备注，以及标记任务完成。</li>
+      <li>iPhone 请关闭静音模式并让应用保持在前台；如果屏幕仍会熄灭，专注时可将「自动锁定」设为「永不」。</li>
+    </ul>
+  </section>
+
+  <section class="card">
+    <h2><span class="en">5. Back up your data</span><span class="zh">5. 备份数据</span></h2>
+    <ul class="en">
+      <li>Your data is stored only on this phone. Nothing goes to a server.</li>
+      <li>Once a week: <b>Settings → Export data (JSON)</b> → Save to Files / iCloud Drive.</li>
+      <li>To restore: <b>Settings → Import data (JSON)</b>.</li>
+      <li>⚠️ Deleting the app icon, clearing Safari website data or changing the app link removes your data. Export first.</li>
+    </ul>
+    <ul class="zh">
+      <li>数据只保存在本机，不会上传到任何服务器。</li>
+      <li>每周一次：<b>Settings → Export data (JSON)</b> → 存储到「文件」或 iCloud 云盘。</li>
+      <li>恢复：<b>Settings → Import data (JSON)</b>。</li>
+      <li>⚠️ 删除主屏幕图标、清除 Safari 网站数据或更换应用链接都会丢失数据，请先导出备份。</li>
+    </ul>
+  </section>
+</div>
+<script>
+  (function () {
+    var KEY = 'commitment-ledger.manual-lang', lang = 'en';
+    try { lang = localStorage.getItem(KEY) || ((navigator.language || '').toLowerCase().indexOf('zh') === 0 ? 'zh' : 'en'); } catch (e) {}
+    function set(l) {
+      lang = l === 'zh' ? 'zh' : 'en';
+      document.body.className = 'show-' + lang;
+      document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
+      document.getElementById('btn-zh').setAttribute('aria-pressed', String(lang === 'zh'));
+      document.getElementById('btn-en').setAttribute('aria-pressed', String(lang === 'en'));
+      try { localStorage.setItem(KEY, lang); } catch (e) {}
+    }
+    document.querySelectorAll('[data-lang]').forEach(function (b) { b.addEventListener('click', function () { set(b.dataset.lang); }); });
+    set(lang);
+  })();
+</script>
+</body>
+</html>
