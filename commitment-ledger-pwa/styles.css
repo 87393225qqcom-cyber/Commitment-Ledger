@@ -498,3 +498,21 @@ header.top .date { margin: 0; color: var(--ink); font-size: clamp(22px, 6vw, 30p
   .task .t-actions { grid-column: 2; justify-content: flex-start; margin-left: -6px; }
   .task .drop-box { grid-column: 1 / -1; }
 }
+
+/* ---- history: tap a day, per-project words chart, break timer ---- */
+button.cell { display: block; width: 100%; appearance: none; -webkit-appearance: none; border: 0; padding: 0; cursor: pointer; }
+button.cell:hover { outline: 2px solid var(--ink); outline-offset: 1px; }
+.cell:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+
+.projcharts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.projcharts li { display: flex; flex-direction: column; gap: 6px; }
+.projchart-head { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.projchart-head .cat-dot { flex: none; }
+.projchart-name { min-width: 0; overflow-wrap: anywhere; }
+.projchart-head .num { margin-left: auto; }
+.cols.mini { height: 34px; }
+.cols.mini span { opacity: .9; }
+
+.break-card .break-time { font-family: var(--display); font-size: clamp(52px, 17vw, 96px); font-weight: 700; letter-spacing: -0.04em; line-height: 1; font-variant-numeric: tabular-nums; text-align: center; }
+.break-card .break-time.done { color: var(--warn); }
+.break-extend { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: center; }

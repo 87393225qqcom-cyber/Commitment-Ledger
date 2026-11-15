@@ -139,7 +139,7 @@
   // ---------- storage (this device only: localStorage) ----------
   const LOCAL = 'commitment-ledger.v1';
   const SCHEMA = 1;
-  const DEFAULT_SETTINGS = { balanceLimit: 65, appearance: 'time', dayFrom: 7, nightFrom: 19, dayStart: 0, alarmSound: 'celebration', morningBriefing: true, eveningSummary: true, eveningHour: 18, lastBriefing: null, lastEvening: null, lastBackup: null };
+  const DEFAULT_SETTINGS = { balanceLimit: 65, appearance: 'time', dayFrom: 7, nightFrom: 19, dayStart: 0, alarmSound: 'celebration', morningBriefing: true, eveningSummary: true, eveningHour: 18, breakMinutes: 5, lastBriefing: null, lastEvening: null, lastBackup: null };
   const Store = {
     backend: 'local', saveTimer: null, failed: false,
     init() {
@@ -704,6 +704,21 @@
     return h;
   }
 
+  function projectDailyWords(pid, days = 14) {
+    const today = todayKey(), logs = allLogs(), out = [];
+    for (let i = days - 1; i >= 0; i--) {
+      const k = addDays(today, -i);
+      out.push({ k, v: logs.filter(l => l.kind === 'words' && l.project === pid && l.date === k).reduce((a, l) => a + (l.value || 0), 0) });
+    }
+    return out;
+  }
+  function wordsMini(pid) {
+    const items = projectDailyWords(pid, 14);
+    const max = Math.max(1, ...items.map(x => x.v));
+    if (!items.some(x => x.v > 0)) return '<p class="muted small">No words logged in the last 14 days.</p>';
+    return `<div class="cols mini" role="img" aria-label="Words per day, last 14 days">${items.map(x => `<span class="${x.v ? '' : 'zero'}" style="height:${Math.max(4, x.v / max * 100)}%" title="${esc(shortDate(x.k))}: ${nf(x.v)} words"></span>`).join('')}</div>`;
+  }
+
   function viewHistory() {
     const today = todayKey();
     const ws = weekStart(today);
@@ -746,7 +761,7 @@
         <div><span class="label">Word count</span><span class="big">${nf(wordsWeek)}</span><span class="delta">words this week · last week ${nf(wordsLast)}</span>
           <div class="cols" role="img" aria-label="Words written per day, last 14 days">${daily.map(v => `<span class="${v ? '' : 'zero'}" style="height:${Math.max(4, v / dMax * 100)}%" title="${nf(v)} words"></span>`).join('')}</div>
           <span class="delta">Last 14 days</span>
-          ${plist(wps, p => nf(projWords(p.id, ws))) || '<p class="muted small">No word-count projects yet.</p>'}</div>
+          ${wps.length ? `<ul class="projcharts">${wps.map(p => `<li><div class="projchart-head"><span class="cat-dot"></span><span class="projchart-name">${esc(p.name)}</span><span class="num">${nf(projWords(p.id, ws))} this week</span></div>${wordsMini(p.id)}</li>`).join('')}</ul>` : '<p class="muted small">No word-count projects yet.</p>'}</div>
         <div><span class="label">Time</span><span class="big">${mins(timeWeek)}</span><span class="delta">this week · last week ${mins(timeLast)}</span>
           ${plist(tps, p => { const w = projMinutes(p.id, ws); return !p.deadline && p.target ? `${mins(w)} / ${p.target}h` : mins(w); }) || '<p class="muted small">No time-tracked projects yet.</p>'}</div>
         <div><span class="label">Other</span><span class="big">${msDone}</span><span class="delta">milestones finished this week</span>
@@ -792,12 +807,16 @@
           if (s.rate != null) { cls = s.rate === 0 ? 'l0' : s.rate < 0.5 ? 'l1' : s.rate < 0.8 ? 'l2' : s.rate < 1 ? 'l3' : 'l4'; tip += `: ${s.done}/${s.committed} kept`; }
         } else tip += ': nothing recorded';
         if (k === today) cls += ' today';
-        cells += `<span class="cell ${cls}" title="${esc(tip)}"></span>`;
+        const clickable = k <= today && d && (d.rest || (d.tasks || []).length > 0);
+        cells += clickable
+          ? `<button type="button" class="cell ${cls}" data-act="day" data-day="${k}" title="${esc(tip + ' · tap to review')}" aria-label="${esc(tip + ' · tap to review')}"></button>`
+          : `<span class="cell ${cls}" title="${esc(tip)}"></span>`;
       }
     }
     h += `<section class="card"><div class="sec-head"><h2>Last 12 weeks</h2></div>
-      <div class="heat-wrap"><div class="heat" role="img" aria-label="Commitments kept per day over the last 12 weeks">${cells}</div></div>
-      <div class="legend"><span><i style="background:var(--empty)"></i>None</span><span><i class="cell l0"></i>0%</span><span><i class="cell l1"></i>under 50%</span><span><i class="cell l2"></i>50–79%</span><span><i class="cell l3"></i>80–99%</span><span><i class="cell l4"></i>All kept</span><span><i class="cell rest"></i>Rest</span></div></section>`;
+      <div class="heat-wrap"><div class="heat">${cells}</div></div>
+      <div class="legend"><span><i style="background:var(--empty)"></i>None</span><span><i class="cell l0"></i>0%</span><span><i class="cell l1"></i>under 50%</span><span><i class="cell l2"></i>50–79%</span><span><i class="cell l3"></i>80–99%</span><span><i class="cell l4"></i>All kept</span><span><i class="cell rest"></i>Rest</span></div>
+      <p class="muted small">Tap a day to review it.</p></section>`;
 
     // blockers
     const tally = {};
@@ -1168,6 +1187,13 @@
     h += `<p class="small muted">This week: ${pct(wk.rate)} of commitments kept · streak ${streak()} day${streak() === 1 ? '' : 's'}</p>`;
     return h;
   }
+  function dayModal(k) {
+    const d = getDay(k);
+    return `<div class="modal-card"><span class="label">${esc(longDate(k))}</span>
+      <h2 id="modal-title">${d.rest ? 'Rest day' : 'Day review'}</h2>
+      ${d.rest ? '<p class="muted">You marked this as a rest day. It didn’t count for or against your streak.</p>' : summaryBody(k)}
+      <div class="row end"><button class="btn primary" data-act="modal-close">Done</button></div></div>`;
+  }
   function closedModal(k) {
     const n = dayNumbers(k), r = n.d.review;
     const good = n.s.rate != null && n.s.rate >= 0.5;
@@ -1293,7 +1319,7 @@
     }
     wrapUp = null;
     stopTimer(); // logs the minutes to the task and closes the timer
-    if (skip) return;
+    if (skip) { maybeOfferBreak(); return; }
     const at = new Date().toISOString(), entries = [];
     if (words > 0) entries.push({ id: rid(), project: p ? p.id : null, taskId: tid, kind: 'words', value: words, note, at });
     else if (note) entries.push({ id: rid(), project: p ? p.id : null, taskId: tid, kind: 'note', value: null, note, at });
@@ -1312,7 +1338,63 @@
     if (note && !words) parts.push('note saved');
     if (done && !closed) parts.push('task done');
     toast(parts.join(' · ') + '.');
+    maybeOfferBreak();
   }
+
+  // ---------- break timer after a focus session ----------
+  const BREAK_OPTS = [5, 10, 15];
+  let breakTimer = null; // { end, alerted }
+
+  function breakLeft() { return breakTimer ? Math.max(0, Math.ceil((breakTimer.end - Date.now()) / 1000)) : 0; }
+
+  function breakModal() {
+    const over = !!breakTimer && breakLeft() <= 0;
+    const mins = state.settings && Number.isFinite(state.settings.breakMinutes) ? state.settings.breakMinutes : 0;
+    return `<div class="modal-card break-card"><span class="label">${over ? 'Break’s over' : 'Break'}</span>
+      <h2 id="modal-title">${over ? 'Ready to come back?' : 'Step away for a bit'}</h2>
+      <div class="break-time${over ? ' done' : ''}" id="break-time">${clockText(breakLeft())}</div>
+      <p class="muted small">${over ? 'Time’s up — a sound played. Get back to it when you’re ready.' : `A ${mins} minute pause after your focus session. A sound plays when it ends.`}</p>
+      ${over ? '' : `<div class="break-extend"><span class="label">Extend</span>${BREAK_OPTS.map(v => `<button class="choice" data-act="break-add" data-v="${v}">+${v}m</button>`).join('')}</div>`}
+      <div class="row end"><button class="btn primary" data-act="break-end">${over ? 'Back to work' : 'Skip break'}</button></div></div>`;
+  }
+
+  function startBreak(mins) {
+    breakTimer = { end: Date.now() + mins * 60000, alerted: false };
+    showModal(breakModal());
+    breakTick();
+  }
+
+  function breakTick() {
+    if (!breakTimer || document.getElementById('modal').hidden) return;
+    const time = document.getElementById('break-time');
+    if (time) time.textContent = clockText(breakLeft());
+    if (breakLeft() <= 0 && !breakTimer.alerted) {
+      breakTimer.alerted = true;
+      playChime();
+      const m = document.getElementById('modal');
+      m.innerHTML = breakModal();
+      const b = m.querySelector('.btn.primary'); if (b) b.focus();
+    }
+  }
+
+  function endBreak(notify) {
+    breakTimer = null;
+    closeModal();
+    if (notify) toast('Break ended.');
+  }
+
+  function maybeOfferBreak() {
+    if (breakTimer) return;
+    const mins = state.settings && Number.isFinite(state.settings.breakMinutes) ? state.settings.breakMinutes : 0;
+    if (!(mins > 0)) return;
+    startBreak(mins);
+  }
+  setInterval(breakTick, 1000);
+  document.addEventListener('click', e => {
+    const b = e.target.closest('[data-act]'); if (!b) return;
+    if (b.dataset.act === 'break-add') { if (breakTimer) { breakTimer.end += Number(b.dataset.v) * 60000; breakTick(); } }
+    else if (b.dataset.act === 'break-end') endBreak(true);
+  });
 
   // ---------- today's balance: live donut by category + pixel miner ----------
   const BAL_CATS = [
@@ -1672,6 +1754,7 @@
     if (t.id === 'set-nightfrom') { setSetting({ nightFrom: Number(t.value) }); applyTheme(); render(); }
     if (t.id === 'set-daystart') { setSetting({ dayStart: Number(t.value) }); lastKey = todayKey(); render(); toast(Number(t.value) ? `Your day now changes at ${t.value}:00.` : 'Your day now changes at midnight.'); }
     if (t.id === 'set-sound') { setSetting({ alarmSound: t.value }); unlockAudio(); playChime(); render(); }
+    if (t.id === 'set-break') { setSetting({ breakMinutes: Number(t.value) }); render(); }
   });
 
   // ---------- settings view ----------
@@ -1713,6 +1796,11 @@
       <div class="row"><select id="set-sound" aria-label="Alarm sound">${SOUNDS.map(x => `<option value="${x.id}"${x.id === snd.id ? " selected" : ""}>${esc(x.name)}</option>`).join("")}</select>
         <button class="btn" data-act="preview-sound">▶ Preview</button><span class="muted small">${esc(snd.hint)}</span></div></section>`;
 
+    h += `<section class="card"><div class="sec-head"><h2>Break timer</h2></div>
+      <div class="row"><label for="set-break" class="small">After a focus session</label>
+        <select id="set-break" aria-label="Break timer">${[0, 5, 10, 15].map(x => `<option value="${x}"${x === (st.breakMinutes ?? 5) ? ' selected' : ''}>${x === 0 ? 'Off' : x + ' min break'}</option>`).join('')}</select></div>
+      <p class="muted small">Offers a short countdown when you end a session, with a sound when it’s over.</p></section>`;
+
     h += `<section class="card"><div class="sec-head"><h2>Backup</h2>${lb ? `<span class="chip ${daysBetween(fmt(lb), todayKey()) >= 7 ? 'warn' : 'on'}">Last backup ${esc(shortDate(fmt(lb)))}</span>` : '<span class="chip warn">Never backed up</span>'}</div>
       <p class="muted small">Your ledger is stored only on this device: <span class="num">${nDays}</span> days, <span class="num">${nProj}</span> projects, <span class="num">${nTasks}</span> listed tasks. Export a backup file every week or so and keep it in iCloud Drive or Files. Safari and the Home Screen app keep separate data, so use the Home Screen app day to day.</p>
       <div class="row"><button class="btn primary" data-act="export">Export data (JSON)</button><button class="btn" data-act="copy-backup">Copy as text</button>
@@ -1736,6 +1824,7 @@
     const k = todayKey();
     switch (b.dataset.act) {
       case 'modal-close': closeModal(); break;
+      case 'day': showModal(dayModal(b.dataset.day)); break;
       case 'plan-today': closeModal(); if (location.hash !== '#today') location.hash = '#today'; setTimeout(() => document.getElementById('new-text')?.focus(), 50); break;
       case 'goto-close': closeModal(); if (location.hash !== '#today') location.hash = '#today';
         setTimeout(() => { const el = document.getElementById('rev-note'); if (el) { el.scrollIntoView({ block: 'center' }); el.focus(); } else if (!getDay(k).locked) toast('Lock in or add what you did first, then close the day.'); }, 80); break;
